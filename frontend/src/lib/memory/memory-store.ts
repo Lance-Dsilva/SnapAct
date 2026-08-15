@@ -5,6 +5,7 @@
 
 import { getConfig, usingRemoteMemory } from "@/lib/config";
 import { ragIndex, ragSearch, type RagSearchHit } from "@/lib/memory/rag-client";
+import { makeImagePath, uploadScreenshot } from "@/lib/memory/supabase-storage";
 import type { MemoryAnalysis, MemoryRecord, MemorySearchHit } from "@/lib/schemas/memory";
 
 type GlobalStore = {
@@ -261,8 +262,20 @@ export class MemoryStore {
     if (cfg.memorySaveEndpoint) {
       try {
         const analysis = (input.metadata.analysis as MemoryAnalysis) || null;
+        const externalId = input.clientRequestId || crypto.randomUUID();
+        const imagePath = makeImagePath(externalId, input.contentType);
+        let imageUrl: string | null = null;
+        if (cfg.supabaseUrl && (cfg.supabaseSecretKey || cfg.supabasePublishableKey)) {
+          const uploaded = await uploadScreenshot({
+            imageBytes: input.imageBytes,
+            contentType: input.contentType,
+            imagePath,
+          });
+          imageUrl = uploaded.imageUrl;
+        }
         const payload = await ragIndex({
-          externalId: input.clientRequestId || crypto.randomUUID(),
+          externalId,
+          imagePath,
           contentType: input.contentType,
           description:
             (input.metadata.description as string) ||
@@ -271,15 +284,20 @@ export class MemoryStore {
           ocrText: analysis?.extracted_text_summary || input.searchableText,
           category: (input.metadata.content_type as string) || analysis?.content_type || "other",
           metadata: {
-            ...input.metadata,
             user_id: input.userId,
             searchable_text: input.searchableText,
+            content_type: analysis?.content_type,
+            intent_mode: analysis?.intent_mode,
+            title: analysis?.title,
+            tags: analysis?.tags,
+            event: analysis?.event,
+            source: input.metadata.source,
           },
         });
         const record: MemoryRecord = {
           memory_id: payload.memory_id,
           user_id: input.userId,
-          image_url: payload.image_url,
+          image_url: imageUrl || payload.image_url,
           created_at: payload.created_at,
           searchable_text: input.searchableText,
           metadata: input.metadata,
@@ -344,7 +362,7 @@ export class MemoryStore {
         const filterType = String(input.filters?.content_type || "").trim();
         const queries = filterType
           ? [filterType, "screenshot"]
-          : ["screenshot", "grok", "saved", "quote"];
+          : ["screenshot", "grok", "saved", "quote", "event"];
         const batches = await Promise.all(
           queries.map((query) =>
             ragSearch({ query, topK }).catch(() => [] as RagSearchHit[]),

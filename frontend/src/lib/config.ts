@@ -12,6 +12,10 @@ export function getConfig() {
     memoryGetEndpoint: process.env.MEMORY_GET_ENDPOINT?.trim() || "",
     memoryUpdateEndpoint: process.env.MEMORY_UPDATE_ENDPOINT?.trim() || "",
     memoryApiKey: process.env.MEMORY_API_KEY?.trim() || process.env.SUPABASE_PUBLISHABLE_KEY?.trim() || "",
+    supabaseUrl: process.env.SUPABASE_URL?.trim() || "",
+    supabasePublishableKey: process.env.SUPABASE_PUBLISHABLE_KEY?.trim() || "",
+    supabaseSecretKey: process.env.SUPABASE_SECRET_KEY?.trim() || "",
+    supabaseBucket: process.env.SUPABASE_BUCKET?.trim() || "screenshots",
     memoryHttpTimeoutMs: Number(process.env.MEMORY_HTTP_TIMEOUT_MS || 30000),
     maxImageBytes: Number(process.env.MAX_IMAGE_BYTES || 12 * 1024 * 1024),
   };

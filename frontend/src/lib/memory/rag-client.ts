@@ -99,6 +99,7 @@ function extensionFor(contentType: string) {
 
 export async function ragIndex(input: {
   externalId: string;
+  imagePath?: string;
   contentType: string;
   description: string;
   ocrText?: string | null;
@@ -108,7 +109,7 @@ export async function ragIndex(input: {
   const cfg = getConfig();
   if (!cfg.memorySaveEndpoint) throw new Error("MEMORY_SAVE_ENDPOINT is not set");
 
-  const imagePath = `${input.externalId}.${extensionFor(input.contentType)}`;
+  const imagePath = input.imagePath || `${input.externalId}.${extensionFor(input.contentType)}`;
   const body = {
     external_id: input.externalId,
     image_path: imagePath,
