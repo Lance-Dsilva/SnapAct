@@ -4,6 +4,7 @@
  */
 
 import { getConfig, usingRemoteMemory } from "@/lib/config";
+import { ragIndex, ragSearch, type RagSearchHit } from "@/lib/memory/rag-client";
 import type { MemoryAnalysis, MemoryRecord, MemorySearchHit } from "@/lib/schemas/memory";
 
 type GlobalStore = {
@@ -23,10 +24,48 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function inferContentType(hit: RagSearchHit): string {
+  const cat = String(hit.category || hit.metadata.category || "").toLowerCase();
+  const known = [
+    "event",
+    "quote",
+    "knowledge",
+    "idea",
+    "place",
+    "product",
+    "job",
+    "person_followup",
+    "conversation",
+    "document",
+    "other",
+  ];
+  if (known.includes(cat)) return cat;
+  const blob = `${hit.description} ${hit.ocr_text} ${JSON.stringify(hit.metadata)}`.toLowerCase();
+  if (cat === "entertainment" || /quote|tweet|post/.test(blob)) return "quote";
+  if (/hackathon|meetup|conference|event|rsvp/.test(blob)) return "event";
+  if (/follow up|linkedin|contact|person/.test(blob)) return "person_followup";
+  if (/restaurant|cafe|map|place|venue/.test(blob)) return "place";
+  if (/idea|brainstorm/.test(blob)) return "idea";
+  return cat || "other";
+}
+
+function titleFromHit(hit: RagSearchHit, contentType: string) {
+  const meta = hit.metadata;
+  const explicit = [meta.title, meta.movie, meta.name, meta.event].find(
+    (value) => typeof value === "string" && value.trim(),
+  ) as string | undefined;
+  if (explicit) return explicit;
+  const line = hit.description.split(/[.!\n]/)[0]?.trim();
+  if (line) return line.slice(0, 80);
+  if (contentType === "quote") return "Saved quote";
+  return hit.memory_id.slice(0, 12);
+}
+
 function seedDemoIfNeeded() {
   const s = store();
   if (s.seeded) return;
   s.seeded = true;
+  if (usingRemoteMemory()) return;
   const userId = getConfig().demoUserId;
   const placeholder =
     "data:image/svg+xml;base64," +
@@ -220,50 +259,47 @@ export class MemoryStore {
     const cfg = getConfig();
 
     if (cfg.memorySaveEndpoint) {
-      // TODO(teammate): confirm multipart field names for your gateway.
-      const form = new FormData();
-      form.append(
-        "image",
-        new Blob([new Uint8Array(input.imageBytes)], { type: input.contentType }),
-        "screenshot.png",
-      );
-      form.append("user_id", input.userId);
-      form.append("metadata", JSON.stringify(input.metadata));
-      form.append("searchable_text", input.searchableText);
-      if (input.clientRequestId) form.append("client_request_id", input.clientRequestId);
-
-      const res = await fetch(cfg.memorySaveEndpoint, {
-        method: "POST",
-        body: form,
-        signal: AbortSignal.timeout(cfg.memoryHttpTimeoutMs),
-      });
-      if (!res.ok) throw new Error(`Memory save failed (${res.status})`);
-      const payload = (await res.json()) as {
-        memory_id?: string;
-        image_url?: string;
-        created_at?: string;
-      };
-      const memoryId = payload.memory_id || `mem_${crypto.randomUUID().slice(0, 10)}`;
-      const record: MemoryRecord = {
-        memory_id: memoryId,
-        user_id: input.userId,
-        image_url: payload.image_url || null,
-        created_at: payload.created_at || nowIso(),
-        searchable_text: input.searchableText,
-        metadata: input.metadata,
-        analysis: (input.metadata.analysis as MemoryAnalysis) || null,
-        source: (input.metadata.source as string) || null,
-        captured_at: (input.metadata.captured_at as string) || null,
-        question: (input.metadata.question as string) || null,
-        user_description: (input.metadata.user_description as string) || null,
-        client_request_id: input.clientRequestId || null,
-      };
-      store().memories.set(memoryId, record);
-      return {
-        memory_id: memoryId,
-        image_url: record.image_url || null,
-        created_at: record.created_at,
-      };
+      try {
+        const analysis = (input.metadata.analysis as MemoryAnalysis) || null;
+        const payload = await ragIndex({
+          externalId: input.clientRequestId || crypto.randomUUID(),
+          contentType: input.contentType,
+          description:
+            (input.metadata.description as string) ||
+            analysis?.description ||
+            input.searchableText,
+          ocrText: analysis?.extracted_text_summary || input.searchableText,
+          category: (input.metadata.content_type as string) || analysis?.content_type || "other",
+          metadata: {
+            ...input.metadata,
+            user_id: input.userId,
+            searchable_text: input.searchableText,
+          },
+        });
+        const record: MemoryRecord = {
+          memory_id: payload.memory_id,
+          user_id: input.userId,
+          image_url: payload.image_url,
+          created_at: payload.created_at,
+          searchable_text: input.searchableText,
+          metadata: input.metadata,
+          analysis: (input.metadata.analysis as MemoryAnalysis) || null,
+          source: (input.metadata.source as string) || null,
+          captured_at: (input.metadata.captured_at as string) || null,
+          question: (input.metadata.question as string) || null,
+          user_description: (input.metadata.user_description as string) || null,
+          client_request_id: input.clientRequestId || null,
+        };
+        store().memories.set(payload.memory_id, record);
+        return {
+          memory_id: payload.memory_id,
+          image_url: record.image_url ?? null,
+          created_at: record.created_at,
+        };
+      } catch (error) {
+        console.warn("RAG index failed; falling back to mock store", error);
+        return this.mockSave(input);
+      }
     }
 
     return this.mockSave(input);
@@ -278,36 +314,17 @@ export class MemoryStore {
     seedDemoIfNeeded();
     const cfg = getConfig();
     if (cfg.memorySearchEndpoint) {
-      const res = await fetch(cfg.memorySearchEndpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_id: input.userId,
+      try {
+        const hits = await ragSearch({
           query: input.query,
-          top_k: input.topK ?? 8,
-          filters: input.filters || {},
-        }),
-        signal: AbortSignal.timeout(cfg.memoryHttpTimeoutMs),
-      });
-      if (!res.ok) throw new Error(`Memory search failed (${res.status})`);
-      const payload = (await res.json()) as {
-        results?: Array<{
-          memory_id: string;
-          score: number;
-          image_url?: string;
-          metadata?: Record<string, unknown>;
-        }>;
-      };
-      return (payload.results || []).map((item) => {
-        const local = store().memories.get(item.memory_id);
-        return {
-          memory_id: item.memory_id,
-          score: item.score,
-          image_url: item.image_url || local?.image_url || null,
-          metadata: item.metadata || local?.metadata || {},
-          analysis: local?.analysis || null,
-        };
-      });
+          topK: input.topK ?? 5,
+        });
+        return hits.map((item) => this.hitToSearch(item));
+      } catch (error) {
+        console.warn("RAG search failed; falling back to mock store", error);
+        if (usingRemoteMemory()) return [];
+        return this.mockSearch(input);
+      }
     }
     return this.mockSearch(input);
   }
@@ -319,7 +336,36 @@ export class MemoryStore {
   }): Promise<MemoryRecord[]> {
     seedDemoIfNeeded();
     const cfg = getConfig();
-    // TODO(teammate): plug MEMORY_LIST_ENDPOINT — needed for homepage + proactive feed.
+    if (cfg.memorySearchEndpoint && !cfg.memoryListEndpoint) {
+      try {
+        const topK = Math.min(Math.max(input.limit ?? 8, 1), 8);
+        const filterType = String(input.filters?.content_type || "").trim();
+        const queries = filterType ? [filterType, "screenshot"] : ["screenshot"];
+        const batches = await Promise.all(
+          queries.map((query) =>
+            ragSearch({ query, topK }).catch(() => [] as RagSearchHit[]),
+          ),
+        );
+        const merged = new Map<string, RagSearchHit>();
+        for (const hit of batches.flat()) merged.set(hit.memory_id, hit);
+        let records = [...merged.values()].map((hit) => this.hitToRecord(hit, input.userId));
+        records.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+        if (filterType) {
+          records = records.filter(
+            (mem) =>
+              mem.analysis?.content_type === filterType ||
+              mem.metadata.content_type === filterType ||
+              mem.metadata.category === filterType,
+          );
+        }
+        records = records.slice(0, input.limit ?? 40);
+        for (const record of records) store().memories.set(record.memory_id, record);
+        if (records.length || usingRemoteMemory()) return records;
+      } catch (error) {
+        console.warn("RAG list via search failed; using local/mock", error);
+        if (usingRemoteMemory()) return [];
+      }
+    }
     if (cfg.memoryListEndpoint) {
       const url = new URL(cfg.memoryListEndpoint);
       url.searchParams.set("user_id", input.userId);
@@ -336,7 +382,29 @@ export class MemoryStore {
   async getMemory(input: { userId: string; memoryId: string }): Promise<MemoryRecord | null> {
     seedDemoIfNeeded();
     const cfg = getConfig();
-    // TODO(teammate): plug MEMORY_GET_ENDPOINT
+    const local = store().memories.get(input.memoryId);
+    if (local && local.user_id === input.userId) return local;
+    if (cfg.memorySearchEndpoint && !cfg.memoryGetEndpoint) {
+      try {
+        const listed = await this.listRecent({ userId: input.userId, limit: 40 });
+        const found = listed.find(
+          (mem) =>
+            mem.memory_id === input.memoryId ||
+            mem.metadata.external_id === input.memoryId,
+        );
+        if (found) return found;
+        const hits = await ragSearch({
+          query: input.memoryId,
+          topK: 8,
+        });
+        const match =
+          hits.find((hit) => hit.memory_id === input.memoryId) ||
+          hits.find((hit) => hit.metadata.external_id === input.memoryId);
+        if (match) return this.hitToRecord(match, input.userId);
+      } catch (error) {
+        console.warn("RAG get via search failed", error);
+      }
+    }
     if (cfg.memoryGetEndpoint) {
       let url = cfg.memoryGetEndpoint;
       if (url.includes("{memory_id}")) url = url.replace("{memory_id}", input.memoryId);
@@ -348,9 +416,73 @@ export class MemoryStore {
       if (!res.ok) throw new Error(`Memory get failed (${res.status})`);
       return (await res.json()) as MemoryRecord;
     }
-    const mem = store().memories.get(input.memoryId);
-    if (!mem || mem.user_id !== input.userId) return null;
-    return mem;
+    return null;
+  }
+
+  private hitToSearch(item: RagSearchHit): MemorySearchHit {
+    const record = this.hitToRecord(item, getConfig().demoUserId);
+    return {
+      memory_id: record.memory_id,
+      score: item.score,
+      image_url: record.image_url,
+      metadata: record.metadata,
+      analysis: record.analysis,
+    };
+  }
+
+  private hitToRecord(item: RagSearchHit, userId: string): MemoryRecord {
+    const local = store().memories.get(item.memory_id);
+    const contentType = inferContentType(item);
+    const title = titleFromHit(item, contentType);
+    const existing = (item.metadata.analysis as MemoryAnalysis) || local?.analysis || null;
+    const analysis: MemoryAnalysis =
+      existing ||
+      ({
+        title,
+        content_type: contentType as MemoryAnalysis["content_type"],
+        intent_mode: "REMEMBER",
+        intent_summary: item.description || "Saved screenshot",
+        description: item.description,
+        searchable_text: [item.description, item.ocr_text].filter(Boolean).join("\n"),
+        tags: [item.category, item.metadata.platform, item.metadata.movie].filter(
+          (value): value is string => typeof value === "string" && Boolean(value),
+        ),
+        entities: [],
+        extracted_text_summary: item.ocr_text || null,
+        actionable: contentType === "event" || contentType === "person_followup",
+        urgency: "none",
+        needs_live_search: false,
+        confidence: item.score || 0.7,
+        suggested_actions: [],
+        citations: [],
+        agent_activity: ["Loaded from SnapAct memory"],
+      } as MemoryAnalysis);
+    const metadata = {
+      ...item.metadata,
+      title,
+      content_type: contentType,
+      category: item.category,
+      description: item.description,
+      analysis,
+    };
+    const record: MemoryRecord = {
+      memory_id: item.memory_id,
+      user_id: userId,
+      image_url: item.image_url || local?.image_url || null,
+      created_at: item.created_at || local?.created_at || nowIso(),
+      searchable_text: analysis.searchable_text,
+      metadata,
+      analysis,
+      source: (item.metadata.source as string) || local?.source || "rag",
+      captured_at: (item.metadata.captured_at as string) || item.created_at || local?.captured_at || null,
+      question: (item.metadata.question as string) || local?.question || null,
+      user_description:
+        (item.metadata.user_description as string) || local?.user_description || null,
+      client_request_id:
+        (item.metadata.client_request_id as string) || local?.client_request_id || null,
+    };
+    store().memories.set(record.memory_id, record);
+    return record;
   }
 
   async updateMemory(input: {

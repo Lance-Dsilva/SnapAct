@@ -12,6 +12,8 @@ export async function GET() {
     cursor_configured: cursorConfigured(),
     memory_store_configured: true,
     using_remote_memory: usingRemoteMemory(),
+    rag_index: Boolean(cfg.memorySaveEndpoint),
+    rag_search: Boolean(cfg.memorySearchEndpoint),
     demo_user_id: cfg.demoUserId,
     model_configured: Boolean(cfg.cursorModel) || cfg.useMockCursor,
   });

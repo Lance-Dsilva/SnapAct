@@ -15,7 +15,7 @@ import {
   IconSend,
   IconSparkle,
 } from "@/components/Icons";
-import { fetchHealth, listMemories, refreshIntelligence } from "@/lib/api";
+import { fetchHealth, listMemories } from "@/lib/api";
 import type { AttentionItem, HomeFeedPlan, MemoryDetail } from "@/types";
 
 const FILTERS = [
@@ -31,6 +31,15 @@ function formatDate(value?: string | null) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value.slice(0, 10);
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function matchesType(memory: MemoryDetail, type: string) {
+  const cat = String(memory.metadata?.category || "").toLowerCase();
+  if (memory.content_type === type) return true;
+  if (type === "quote" && (cat === "entertainment" || cat === "quote")) return true;
+  if (type === "event" && cat === "event") return true;
+  if (type === "person_followup" && (cat === "people" || cat === "person")) return true;
+  return false;
 }
 
 function eventMeta(item: AttentionItem, memories: MemoryDetail[]) {
@@ -62,13 +71,17 @@ export default function HomeClient() {
     setLoading(true);
     setError(null);
     try {
-      const [, mems, intel] = await Promise.all([
-        fetchHealth().catch(() => null),
-        listMemories(),
-        refreshIntelligence(),
-      ]);
+      const [, mems] = await Promise.all([fetchHealth().catch(() => null), listMemories()]);
       setMemories(mems.memories);
-      setFeed(intel);
+      setFeed({
+        generated_at: new Date().toISOString(),
+        needs_attention: [],
+        upcoming_events: mems.memories.filter((m) => matchesType(m, "event")).map(toItem),
+        follow_ups: mems.memories.filter((m) => matchesType(m, "person_followup")).map(toItem),
+        suggested_explorations: [],
+        quotes: mems.memories.filter((m) => matchesType(m, "quote")).map(toItem),
+        recent: mems.memories.map(toItem),
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load SnapAct data");
     } finally {
@@ -80,19 +93,18 @@ export default function HomeClient() {
     void load();
   }, [load]);
 
-  const quotes = feed?.quotes?.length
-    ? feed.quotes
-    : memories.filter((m) => m.content_type === "quote").map(toItem);
+  const quotes = feed?.quotes?.length ? feed.quotes : memories.filter((m) => matchesType(m, "quote")).map(toItem);
   const events = feed?.upcoming_events?.length
     ? feed.upcoming_events
-    : memories.filter((m) => m.content_type === "event").map(toItem);
+    : memories.filter((m) => matchesType(m, "event")).map(toItem);
   const people = feed?.follow_ups?.length
     ? feed.follow_ups
-    : memories.filter((m) => m.content_type === "person_followup").map(toItem);
+    : memories.filter((m) => matchesType(m, "person_followup")).map(toItem);
+  const recent = feed?.recent?.length ? feed.recent : memories.map(toItem);
 
   const filtered = useMemo(() => {
     if (!category) return memories;
-    return memories.filter((m) => m.content_type === category);
+    return memories.filter((m) => matchesType(m, category));
   }, [memories, category]);
 
   function submitAsk(e: FormEvent) {
@@ -164,6 +176,41 @@ export default function HomeClient() {
       ) : (
         <>
           <section className="mt-6">
+            <SectionHead title="Recent" />
+            <div className="mt-3 space-y-3">
+              {recent.slice(0, 8).map((item) => {
+                const mem = memories.find((m) => m.memory_id === item.memory_id);
+                return (
+                  <Link
+                    key={item.memory_id}
+                    href={`/memory/${item.memory_id}`}
+                    className="flex gap-3 rounded-2xl bg-[#f8f9fb] p-3"
+                  >
+                    {item.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={item.image_url} alt="" className="h-16 w-16 rounded-xl object-cover" />
+                    ) : (
+                      <div className="h-16 w-16 rounded-xl bg-[#e5e7eb]" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-semibold">{item.title}</div>
+                      <p className="mt-0.5 line-clamp-2 text-sm text-[#6b7280]">
+                        {mem?.description || item.reason}
+                      </p>
+                      <p className="mt-1 text-[12px] text-[#9ca3af]">{formatDate(mem?.created_at)}</p>
+                    </div>
+                  </Link>
+                );
+              })}
+              {!recent.length ? (
+                <p className="text-sm text-[#9ca3af]">
+                  No screenshots in memory yet. Capture one and it will show up here from search.
+                </p>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="mt-6">
             <SectionHead title="Saved Quotes" href="/ask?q=quotes" />
             <div className="mt-3 flex gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {quotes.slice(0, 6).map((item) => {
@@ -185,6 +232,9 @@ export default function HomeClient() {
                   </Link>
                 );
               })}
+              {!quotes.length ? (
+                <p className="text-sm text-[#9ca3af]">No quotes in memory yet.</p>
+              ) : null}
             </div>
           </section>
 
@@ -225,6 +275,9 @@ export default function HomeClient() {
                   </Link>
                 );
               })}
+              {!events.length ? (
+                <p className="text-sm text-[#9ca3af]">No upcoming events in memory yet.</p>
+              ) : null}
             </div>
           </section>
 
@@ -263,6 +316,9 @@ export default function HomeClient() {
                   </Link>
                 );
               })}
+              {!people.length ? (
+                <p className="text-sm text-[#9ca3af]">No people follow-ups in memory yet.</p>
+              ) : null}
             </div>
           </section>
         </>
