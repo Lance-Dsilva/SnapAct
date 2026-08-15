@@ -270,12 +270,7 @@ export async function handleCapture(req: Request, forcedMode?: CaptureMode) {
       );
     }
 
-    const shortMessage =
-      mode === "save"
-        ? analysis.short_message?.startsWith("Saved to SnapAct")
-          ? analysis.short_message
-          : `Saved to SnapAct ✓ ${analysis.title}`
-        : analysis.short_message || analysis.answer || `Saved: ${analysis.title}`;
+    const shortMessage = analysis.short_message || analysis.answer || `Saved: ${analysis.title}`;
 
     const response = {
       memory_id: saved.memory_id,
