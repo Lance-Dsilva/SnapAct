@@ -319,7 +319,9 @@ export class MemoryStore {
           query: input.query,
           topK: input.topK ?? 5,
         });
-        return hits.map((item) => this.hitToSearch(item));
+        return hits
+          .map((item) => this.hitToSearch(item))
+          .filter((hit) => Boolean(hit.image_url));
       } catch (error) {
         console.warn("RAG search failed; falling back to mock store", error);
         if (usingRemoteMemory()) return [];
@@ -340,7 +342,9 @@ export class MemoryStore {
       try {
         const topK = Math.min(Math.max(input.limit ?? 8, 1), 8);
         const filterType = String(input.filters?.content_type || "").trim();
-        const queries = filterType ? [filterType, "screenshot"] : ["screenshot"];
+        const queries = filterType
+          ? [filterType, "screenshot"]
+          : ["screenshot", "grok", "saved", "quote"];
         const batches = await Promise.all(
           queries.map((query) =>
             ragSearch({ query, topK }).catch(() => [] as RagSearchHit[]),
@@ -348,7 +352,9 @@ export class MemoryStore {
         );
         const merged = new Map<string, RagSearchHit>();
         for (const hit of batches.flat()) merged.set(hit.memory_id, hit);
-        let records = [...merged.values()].map((hit) => this.hitToRecord(hit, input.userId));
+        let records = [...merged.values()]
+          .map((hit) => this.hitToRecord(hit, input.userId))
+          .filter((mem) => Boolean(mem.image_url));
         records.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
         if (filterType) {
           records = records.filter(

@@ -65,22 +65,23 @@ export default function HomeClient() {
   const [category, setCategory] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [ask, setAsk] = useState("");
+  const [showAllScreenshots, setShowAllScreenshots] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const [, mems] = await Promise.all([fetchHealth().catch(() => null), listMemories()]);
-      setMemories(mems.memories);
+      const live = mems.memories.filter((m) => Boolean(m.image_url));
+      setMemories(live);
       setFeed({
         generated_at: new Date().toISOString(),
         needs_attention: [],
-        upcoming_events: mems.memories.filter((m) => matchesType(m, "event")).map(toItem),
-        follow_ups: mems.memories.filter((m) => matchesType(m, "person_followup")).map(toItem),
+        upcoming_events: live.filter((m) => matchesType(m, "event")).map(toItem),
+        follow_ups: live.filter((m) => matchesType(m, "person_followup")).map(toItem),
         suggested_explorations: [],
-        quotes: mems.memories.filter((m) => matchesType(m, "quote")).map(toItem),
-        recent: mems.memories.map(toItem),
+        quotes: live.filter((m) => matchesType(m, "quote")).map(toItem),
+        recent: live.map(toItem),
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load SnapAct data");
@@ -100,7 +101,10 @@ export default function HomeClient() {
   const people = feed?.follow_ups?.length
     ? feed.follow_ups
     : memories.filter((m) => matchesType(m, "person_followup")).map(toItem);
-  const recent = feed?.recent?.length ? feed.recent : memories.map(toItem);
+  const recent = (feed?.recent?.length ? feed.recent : memories.map(toItem)).filter(
+    (item) => Boolean(item.image_url),
+  );
+  const visibleRecent = showAllScreenshots ? recent : recent.slice(0, 3);
 
   const filtered = useMemo(() => {
     if (!category) return memories;
@@ -178,7 +182,7 @@ export default function HomeClient() {
           <section className="mt-6">
             <SectionHead title="Screenshots" />
             <div className="mt-3 space-y-3">
-              {recent.slice(0, 8).map((item) => {
+              {visibleRecent.map((item) => {
                 const mem = memories.find((m) => m.memory_id === item.memory_id);
                 return (
                   <Link
@@ -202,6 +206,24 @@ export default function HomeClient() {
                   </Link>
                 );
               })}
+              {recent.length > 3 && !showAllScreenshots ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAllScreenshots(true)}
+                  className="w-full rounded-2xl bg-[#f3f4f6] py-3 text-[14px] font-medium text-[var(--accent)]"
+                >
+                  More ({recent.length - 3})
+                </button>
+              ) : null}
+              {showAllScreenshots && recent.length > 3 ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAllScreenshots(false)}
+                  className="w-full text-[13px] font-medium text-[#6b7280]"
+                >
+                  Show less
+                </button>
+              ) : null}
               {!recent.length ? (
                 <p className="text-sm text-[#9ca3af]">
                   No screenshots in memory yet. Capture one and it will show up here from search.
