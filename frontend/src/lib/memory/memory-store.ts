@@ -380,7 +380,7 @@ export class MemoryStore {
         const filterType = String(input.filters?.content_type || "").trim();
         const queries = filterType
           ? [filterType, "screenshot"]
-          : ["screenshot", "grok", "saved", "quote", "event"];
+          : ["screenshot", "event", "place", "movie", "restaurant", "quote"];
         const batches = await Promise.all(
           queries.map((query) =>
             ragSearch({ query, topK }).catch(() => [] as RagSearchHit[]),
