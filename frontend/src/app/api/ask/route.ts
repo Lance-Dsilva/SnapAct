@@ -39,18 +39,38 @@ export async function POST(req: Request) {
       };
     });
 
-    const synthesized = await analyzeSavedMemories({
-      question,
-      memories: memories.map((m) => ({
-        memory_id: m.memory_id,
-        title: m.title,
-        description: m.description,
-        content_type: m.content_type,
-        intent_mode: m.intent_mode,
-        tags: m.tags,
-        score: m.score,
-      })),
-    });
+    let synthesized: {
+      answer: string;
+      short_message: string;
+      citations: unknown[];
+      agent_activity: string[];
+    };
+    try {
+      synthesized = await analyzeSavedMemories({
+        question,
+        memories: memories.map((m) => ({
+          memory_id: m.memory_id,
+          title: m.title,
+          description: m.description,
+          content_type: m.content_type,
+          intent_mode: m.intent_mode,
+          tags: m.tags,
+          score: m.score,
+        })),
+      });
+    } catch (err) {
+      console.warn("[ask] grok synthesis failed; returning search hits", err);
+      const titles = memories.map((m) => m.title).filter(Boolean).slice(0, 5);
+      const answer = titles.length
+        ? `I found ${memories.length} related screenshot(s): ${titles.join("; ")}.`
+        : `I could not find matching screenshots for “${question}”.`;
+      synthesized = {
+        answer,
+        short_message: answer,
+        citations: [],
+        agent_activity: ["Retrieved memories", "Grok unavailable; listed search results"],
+      };
+    }
 
     return NextResponse.json({
       answer: synthesized.answer,

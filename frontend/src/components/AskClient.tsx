@@ -22,12 +22,21 @@ function AskInner() {
     setLoading(true);
     setError(null);
     try {
-      const [ask, search] = await Promise.all([
-        askSnapAct(q.trim()),
-        searchMemories(q.trim()),
-      ]);
-      setAnswer(ask);
+      const search = await searchMemories(q.trim());
       setSearchHits(search.results);
+      try {
+        const ask = await askSnapAct(q.trim());
+        setAnswer(ask);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Ask failed");
+        if (search.results.length) {
+          setAnswer({
+            answer: `Related screenshots for “${q.trim()}”:`,
+            memories: search.results,
+            citations: [],
+          });
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ask failed");
     } finally {

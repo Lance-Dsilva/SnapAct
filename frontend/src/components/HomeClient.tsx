@@ -176,7 +176,7 @@ export default function HomeClient() {
       ) : (
         <>
           <section className="mt-6">
-            <SectionHead title="Recent" />
+            <SectionHead title="Screenshots" />
             <div className="mt-3 space-y-3">
               {recent.slice(0, 8).map((item) => {
                 const mem = memories.find((m) => m.memory_id === item.memory_id);

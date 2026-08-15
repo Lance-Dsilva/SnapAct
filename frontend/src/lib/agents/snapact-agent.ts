@@ -3,7 +3,10 @@
  * All Grok 4.6 inference goes through Cursor (no direct api.x.ai calls).
  */
 
-import { Agent, Cursor, CursorAgentError } from "@cursor/sdk";
+import { mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Agent, Cursor, CursorAgentError, JsonlLocalAgentStore } from "@cursor/sdk";
 import type { SDKCustomTool, SDKJsonValue } from "@cursor/sdk";
 import { getConfig, cursorConfigured } from "@/lib/config";
 import { getMemoryStore } from "@/lib/memory/memory-store";
@@ -40,6 +43,17 @@ export interface AgentRunMeta {
   toolsUsed: string[];
   webSearchUsed: boolean;
   requestId?: string;
+}
+
+function writableSdkRoot() {
+  const root = join(tmpdir(), "snapact-sdk");
+  mkdirSync(root, { recursive: true });
+  mkdirSync(join(root, "agent-store"), { recursive: true });
+  // Vercel lambda HOME is not writable; Cursor SDK mkdirs under ~/.cursor/...
+  process.env.HOME = tmpdir();
+  process.env.XDG_CACHE_HOME = join(tmpdir(), "cache");
+  mkdirSync(process.env.XDG_CACHE_HOME, { recursive: true });
+  return root;
 }
 
 function requireCursorConfig() {
@@ -389,7 +403,8 @@ async function runCursorPrompt(input: {
       ...(cfg.cursorApiKey ? { apiKey: cfg.cursorApiKey } : {}),
       model: { id: cfg.cursorModel },
       local: {
-        cwd: process.cwd(),
+        cwd: writableSdkRoot(),
+        store: new JsonlLocalAgentStore(join(writableSdkRoot(), "agent-store")),
         settingSources: [],
         customTools,
       },
