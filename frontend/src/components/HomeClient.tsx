@@ -65,6 +65,7 @@ export default function HomeClient() {
   const [category, setCategory] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [ask, setAsk] = useState("");
   const [showAllScreenshots, setShowAllScreenshots] = useState(false);
 
   const load = useCallback(async () => {
