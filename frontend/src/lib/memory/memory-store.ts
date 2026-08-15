@@ -255,6 +255,7 @@ export class MemoryStore {
     metadata: Record<string, unknown>;
     searchableText: string;
     clientRequestId?: string | null;
+    skipUpload?: boolean;
   }): Promise<{ memory_id: string; image_url: string | null; created_at: string; duplicate?: boolean }> {
     seedDemoIfNeeded();
     const cfg = getConfig();
@@ -265,7 +266,11 @@ export class MemoryStore {
         const externalId = input.clientRequestId || crypto.randomUUID();
         const imagePath = makeImagePath(externalId, input.contentType);
         let imageUrl: string | null = null;
-        if (cfg.supabaseUrl && (cfg.supabaseSecretKey || cfg.supabasePublishableKey)) {
+        if (
+          !input.skipUpload &&
+          cfg.supabaseUrl &&
+          (cfg.supabaseSecretKey || cfg.supabasePublishableKey)
+        ) {
           const uploaded = await uploadScreenshot({
             imageBytes: input.imageBytes,
             contentType: input.contentType,

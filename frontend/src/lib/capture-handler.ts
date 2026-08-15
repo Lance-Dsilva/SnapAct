@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { analyzeScreenshot, SnapActAgentError } from "@/lib/agents/snapact-agent";
 import { getConfig } from "@/lib/config";
 import { getIdempotent, setIdempotent } from "@/lib/idempotency";
@@ -63,6 +63,117 @@ export async function handleCapture(req: Request, forcedMode?: CaptureMode) {
     const { bytes, contentType } = await validateImageFile(image);
     const cfg = getConfig();
     const store = getMemoryStore();
+    const saveId = clientRequestId || crypto.randomUUID();
+
+    if (mode === "save") {
+      const pendingAnalysis: MemoryAnalysis = {
+        title: "Saved screenshot",
+        content_type: "other",
+        intent_mode: "REMEMBER",
+        intent_summary: "Screenshot captured from iPhone; Grok is still analyzing.",
+        description: "Screenshot saved. Analysis is running in the background.",
+        searchable_text: "saved screenshot iphone capture pending analysis",
+        tags: ["pending"],
+        entities: [],
+        actionable: false,
+        urgency: "none",
+        needs_live_search: false,
+        confidence: 0.2,
+        suggested_actions: [],
+        citations: [],
+        agent_activity: ["Screenshot received", "Saved immediately", "Grok analyzing in background"],
+        short_message: "Saved to SnapAct ✓",
+      };
+      let saved: { memory_id: string; image_url: string | null; created_at: string };
+      try {
+        saved = await store.saveMemory({
+          userId: cfg.demoUserId,
+          imageBytes: bytes,
+          contentType,
+          metadata: {
+            title: pendingAnalysis.title,
+            content_type: pendingAnalysis.content_type,
+            source,
+            captured_at: capturedAt,
+            analysis: pendingAnalysis,
+            mode,
+            pending: true,
+          },
+          searchableText: pendingAnalysis.searchable_text,
+          clientRequestId: saveId,
+        });
+      } catch (err) {
+        return jsonError(
+          err instanceof Error ? `Could not save screenshot: ${err.message}` : "Could not save screenshot.",
+          502,
+        );
+      }
+
+      const imageBytes = Buffer.from(bytes);
+      after(async () => {
+        try {
+          const result = await analyzeScreenshot({
+            imageBytes,
+            mimeType: contentType,
+            mode: "save",
+            question,
+            userDescription,
+            source,
+            capturedAt,
+          });
+          const analysis = result.analysis;
+          analysis.agent_activity = [...(analysis.agent_activity || []), "Background analysis saved"];
+          await store.saveMemory({
+            userId: cfg.demoUserId,
+            imageBytes,
+            contentType,
+            metadata: {
+              title: analysis.title,
+              content_type: analysis.content_type,
+              intent_mode: analysis.intent_mode,
+              intent_summary: analysis.intent_summary,
+              description: analysis.description,
+              tags: analysis.tags,
+              event: analysis.event,
+              person_followup: analysis.person_followup,
+              place: analysis.place,
+              captured_at: capturedAt,
+              source,
+              analysis,
+              mode: "save",
+              pending: false,
+            },
+            searchableText: analysis.searchable_text,
+            clientRequestId: saveId,
+            skipUpload: true,
+          });
+          console.info(`[capture] background done request_id=${requestId} memory_id=${saved.memory_id}`);
+        } catch (err) {
+          console.error(`[capture] background failed request_id=${requestId}`, err);
+        }
+      });
+
+      const response = {
+        memory_id: saved.memory_id,
+        short_message: "Saved to SnapAct ✓",
+        answer: null,
+        analysis: pendingAnalysis,
+        suggested_actions: [],
+        citations: [],
+        image_url: saved.image_url,
+        agent_activity: pendingAnalysis.agent_activity,
+        duplicate: false,
+        degraded: false,
+        warning: null,
+        pending: true,
+        model: cfg.cursorModel || "pending",
+        tools_used: [],
+        duration_ms: Date.now() - started,
+        request_id: requestId,
+      };
+      setIdempotent(saveId, response);
+      return NextResponse.json(response);
+    }
 
     let analysis: MemoryAnalysis;
     let degraded = false;
