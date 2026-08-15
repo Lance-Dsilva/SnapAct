@@ -4,6 +4,7 @@ import { getConfig } from "@/lib/config";
 import { getIdempotent, setIdempotent } from "@/lib/idempotency";
 import { validateImageFile } from "@/lib/image";
 import { getMemoryStore } from "@/lib/memory/memory-store";
+import { makeImagePath, uploadScreenshot } from "@/lib/memory/supabase-storage";
 import type { CaptureMode, MemoryAnalysis } from "@/lib/schemas/memory";
 
 function jsonError(message: string, status = 400) {
@@ -66,42 +67,17 @@ export async function handleCapture(req: Request, forcedMode?: CaptureMode) {
     const saveId = clientRequestId || crypto.randomUUID();
 
     if (mode === "save") {
-      const pendingAnalysis: MemoryAnalysis = {
-        title: "Saved screenshot",
-        content_type: "other",
-        intent_mode: "REMEMBER",
-        intent_summary: "Screenshot captured from iPhone; Grok is still analyzing.",
-        description: "Screenshot saved. Analysis is running in the background.",
-        searchable_text: "saved screenshot iphone capture pending analysis",
-        tags: ["pending"],
-        entities: [],
-        actionable: false,
-        urgency: "none",
-        needs_live_search: false,
-        confidence: 0.2,
-        suggested_actions: [],
-        citations: [],
-        agent_activity: ["Screenshot received", "Saved immediately", "Grok analyzing in background"],
-        short_message: "Saved to SnapAct ✓",
-      };
-      let saved: { memory_id: string; image_url: string | null; created_at: string };
+      const imageBytes = Buffer.from(bytes);
+      let imageUrl: string | null = null;
       try {
-        saved = await store.saveMemory({
-          userId: cfg.demoUserId,
-          imageBytes: bytes,
-          contentType,
-          metadata: {
-            title: pendingAnalysis.title,
-            content_type: pendingAnalysis.content_type,
-            source,
-            captured_at: capturedAt,
-            analysis: pendingAnalysis,
-            mode,
-            pending: true,
-          },
-          searchableText: pendingAnalysis.searchable_text,
-          clientRequestId: saveId,
-        });
+        if (cfg.supabaseUrl && (cfg.supabaseSecretKey || cfg.supabasePublishableKey)) {
+          const uploaded = await uploadScreenshot({
+            imageBytes,
+            contentType,
+            imagePath: makeImagePath(saveId, contentType),
+          });
+          imageUrl = uploaded.imageUrl;
+        }
       } catch (err) {
         return jsonError(
           err instanceof Error ? `Could not save screenshot: ${err.message}` : "Could not save screenshot.",
@@ -109,7 +85,6 @@ export async function handleCapture(req: Request, forcedMode?: CaptureMode) {
         );
       }
 
-      const imageBytes = Buffer.from(bytes);
       after(async () => {
         try {
           const result = await analyzeScreenshot({
@@ -141,27 +116,26 @@ export async function handleCapture(req: Request, forcedMode?: CaptureMode) {
               source,
               analysis,
               mode: "save",
-              pending: false,
             },
             searchableText: analysis.searchable_text,
             clientRequestId: saveId,
             skipUpload: true,
           });
-          console.info(`[capture] background done request_id=${requestId} memory_id=${saved.memory_id}`);
+          console.info(`[capture] background done request_id=${requestId} memory_id=${saveId}`);
         } catch (err) {
           console.error(`[capture] background failed request_id=${requestId}`, err);
         }
       });
 
       const response = {
-        memory_id: saved.memory_id,
+        memory_id: saveId,
         short_message: "Saved to SnapAct ✓",
         answer: null,
-        analysis: pendingAnalysis,
+        analysis: null,
         suggested_actions: [],
         citations: [],
-        image_url: saved.image_url,
-        agent_activity: pendingAnalysis.agent_activity,
+        image_url: imageUrl,
+        agent_activity: ["Screenshot received", "Saved immediately", "Grok analyzing in background"],
         duplicate: false,
         degraded: false,
         warning: null,

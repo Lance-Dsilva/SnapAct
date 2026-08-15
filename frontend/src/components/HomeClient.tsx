@@ -73,7 +73,14 @@ export default function HomeClient() {
     setError(null);
     try {
       const [, mems] = await Promise.all([fetchHealth().catch(() => null), listMemories()]);
-      const live = mems.memories.filter((m) => Boolean(m.image_url));
+      const live = mems.memories.filter((m) => {
+        const blob = `${m.title} ${m.description}`;
+        return (
+          Boolean(m.image_url) &&
+          !/analysis is running in the background/i.test(blob) &&
+          m.title !== "Saved screenshot"
+        );
+      });
       setMemories(live);
       setFeed({
         generated_at: new Date().toISOString(),

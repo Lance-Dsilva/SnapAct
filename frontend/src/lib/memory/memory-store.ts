@@ -25,6 +25,19 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function isUnfinishedMemory(mem: {
+  searchable_text?: string;
+  metadata?: Record<string, unknown>;
+  analysis?: MemoryAnalysis | null;
+}) {
+  const blob = `${mem.analysis?.title || ""} ${mem.analysis?.description || ""} ${mem.searchable_text || ""} ${JSON.stringify(mem.metadata || {})}`;
+  return (
+    mem.metadata?.pending === true ||
+    /analysis is running in the background/i.test(blob) ||
+    /pending analysis/i.test(blob)
+  );
+}
+
 function inferContentType(hit: RagSearchHit): string {
   const cat = String(hit.category || hit.metadata.category || "").toLowerCase();
   const known = [
@@ -344,7 +357,7 @@ export class MemoryStore {
         });
         return hits
           .map((item) => this.hitToSearch(item))
-          .filter((hit) => Boolean(hit.image_url));
+          .filter((hit) => Boolean(hit.image_url) && !isUnfinishedMemory(hit));
       } catch (error) {
         console.warn("RAG search failed; falling back to mock store", error);
         if (usingRemoteMemory()) return [];
@@ -377,7 +390,7 @@ export class MemoryStore {
         for (const hit of batches.flat()) merged.set(hit.memory_id, hit);
         let records = [...merged.values()]
           .map((hit) => this.hitToRecord(hit, input.userId))
-          .filter((mem) => Boolean(mem.image_url));
+          .filter((mem) => Boolean(mem.image_url) && !isUnfinishedMemory(mem));
         records.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
         if (filterType) {
           records = records.filter(
