@@ -376,24 +376,17 @@ export class MemoryStore {
     const cfg = getConfig();
     if (cfg.memorySearchEndpoint && !cfg.memoryListEndpoint) {
       try {
-        const topK = Math.min(Math.max(input.limit ?? 20, 1), 40);
         const filterType = String(input.filters?.content_type || "").trim();
-        const query = filterType || "event";
-        const hits = await ragSearch({ query, topK });
+        const hits = await this.searchMemories({
+          userId: input.userId,
+          query: filterType || "event",
+          topK: 8,
+        });
         let records = hits
-          .map((hit) => this.hitToRecord(hit, input.userId))
-          .filter((mem) => Boolean(mem.image_url) && !isUnfinishedMemory(mem));
+          .map((hit) => store().memories.get(hit.memory_id))
+          .filter((mem): mem is MemoryRecord => Boolean(mem));
         records.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
-        if (filterType) {
-          records = records.filter(
-            (mem) =>
-              mem.analysis?.content_type === filterType ||
-              mem.metadata.content_type === filterType ||
-              mem.metadata.category === filterType,
-          );
-        }
         records = records.slice(0, input.limit ?? 40);
-        for (const record of records) store().memories.set(record.memory_id, record);
         if (records.length || usingRemoteMemory()) return records;
       } catch (error) {
         console.warn("RAG list via search failed; using local/mock", error);
