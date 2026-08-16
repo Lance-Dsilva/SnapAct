@@ -68,7 +68,9 @@ function normalizeHit(item: unknown, index: number): RagSearchHit {
   const category = pickString(raw, ["category"]) || pickString(nested, ["category"]);
   const ocrText = pickString(raw, ["ocr_text"]) || pickString(nested, ["ocr_text"]);
   const createdAt =
-    pickString(raw, ["created_at", "createdAt"]) || pickString(nested, ["created_at"]) || null;
+    pickString(raw, ["created_at", "createdAt", "uploaded_at"]) ||
+    pickString(nested, ["created_at", "uploaded_at", "captured_at"]) ||
+    null;
   return {
     memory_id: memoryId,
     score: pickNumber(raw, ["score", "similarity", "distance"]),

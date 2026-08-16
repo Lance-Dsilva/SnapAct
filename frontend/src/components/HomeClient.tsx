@@ -34,6 +34,26 @@ function formatDate(value?: string | null) {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function formatUploaded(value?: string | null) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value.slice(0, 16);
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function uploadedAt(memory: MemoryDetail) {
+  return memory.created_at || memory.captured_at || "";
+}
+
+function byNewest(a: MemoryDetail, b: MemoryDetail) {
+  return new Date(uploadedAt(b) || 0).getTime() - new Date(uploadedAt(a) || 0).getTime();
+}
+
 function matchesType(memory: MemoryDetail, type: string) {
   const cat = String(memory.metadata?.category || "").toLowerCase();
   if (memory.content_type === type) return true;
@@ -74,10 +94,12 @@ export default function HomeClient() {
     setError(null);
     try {
       const [, mems] = await Promise.all([fetchHealth().catch(() => null), listMemories()]);
-      const live = mems.memories.filter((m) => {
-        const blob = `${m.title} ${m.description}`;
-        return !/analysis is running in the background/i.test(blob);
-      });
+      const live = mems.memories
+        .filter((m) => {
+          const blob = `${m.title} ${m.description}`;
+          return !/analysis is running in the background/i.test(blob);
+        })
+        .sort(byNewest);
       const tomorrow = addDaysYmd(null, 1);
       const today = addDaysYmd(null, 0);
       const todos = live
@@ -129,7 +151,7 @@ export default function HomeClient() {
 
   const filtered = useMemo(() => {
     if (!category) return memories;
-    return memories.filter((m) => matchesType(m, category));
+    return memories.filter((m) => matchesType(m, category)).sort(byNewest);
   }, [memories, category]);
 
   function submitAsk(e: FormEvent) {
@@ -255,7 +277,9 @@ export default function HomeClient() {
                       <p className="mt-0.5 line-clamp-2 text-sm text-[#6b7280]">
                         {mem?.description || item.reason}
                       </p>
-                      <p className="mt-1 text-[12px] text-[#9ca3af]">{formatDate(mem?.created_at)}</p>
+                      <p className="mt-1 text-[12px] text-[#9ca3af]">
+                        {formatUploaded(mem ? uploadedAt(mem) : "")}
+                      </p>
                     </div>
                   </Link>
                 );

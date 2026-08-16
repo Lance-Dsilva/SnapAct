@@ -299,6 +299,7 @@ export class MemoryStore {
             analysis?.title,
             (input.metadata.description as string) || analysis?.description,
             input.searchableText,
+            `Uploaded at ${nowIso()}`,
           ]
             .filter((part) => typeof part === "string" && part.trim())
             .join(". ")
@@ -316,6 +317,8 @@ export class MemoryStore {
             temporal: analysis?.temporal || input.metadata.temporal,
             suggested_actions: analysis?.suggested_actions,
             source: input.metadata.source,
+            uploaded_at: nowIso(),
+            captured_at: (input.metadata.captured_at as string) || nowIso(),
           },
         });
         const record: MemoryRecord = {
@@ -386,7 +389,7 @@ export class MemoryStore {
     if (cfg.memorySearchEndpoint && !cfg.memoryListEndpoint) {
       try {
         const filterType = String(input.filters?.content_type || "").trim();
-        const probes = filterType ? [filterType] : ["event", "screenshot"];
+        const probes = filterType ? [filterType] : ["event", "knowledge", "screenshot"];
         const byId = new Map<string, MemoryRecord>();
         for (const query of probes) {
           const hits = await ragSearch({ query, topK: 8, signImages: false }).catch((error) => {
@@ -532,7 +535,12 @@ export class MemoryStore {
       memory_id: item.memory_id,
       user_id: userId,
       image_url: item.image_url || local?.image_url || null,
-      created_at: item.created_at || local?.created_at || nowIso(),
+      created_at:
+        item.created_at ||
+        (item.metadata.uploaded_at as string) ||
+        (item.metadata.captured_at as string) ||
+        local?.created_at ||
+        nowIso(),
       searchable_text: analysis.searchable_text,
       metadata,
       analysis,
