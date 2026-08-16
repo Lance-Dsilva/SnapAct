@@ -137,9 +137,19 @@ Until then, SnapAct uses an in-memory mock with demo seeds.
 
 ## Deploy (Vercel)
 
-1. Deploy the `frontend` directory.
-2. Set server env: `CURSOR_API_KEY`, `CURSOR_MODEL`, `DEMO_USER_ID`, memory endpoints.
+One project: **snapact** → https://snapact-beta.vercel.app
+
+The Next.js app in `frontend/` is the UI and the API (`/api/*`, including Apple Shortcut routes). There is no second Vercel project and no FastAPI service.
+
+1. GitHub `main` deploys this project (root directory `frontend`).
+2. Set server env: `CURSOR_API_KEY`, `CURSOR_MODEL=gpt-5.6-luna`, `CURSOR_SEARCH_MODEL=composer-2.5`, `DEMO_USER_ID`, Supabase, memory endpoints.
 3. Increase function duration if needed (`maxDuration` is set on capture/ask routes).
+
+Shortcut URLs:
+
+- `POST https://snapact-beta.vercel.app/api/shortcut/save`
+- `POST https://snapact-beta.vercel.app/api/shortcut/ask`
+- `POST https://snapact-beta.vercel.app/api/shortcut/describe`
 
 Note: Cursor SDK local agents run in the Node process. Prefer local `npm run dev` for the most reliable agent tooling demo; validate Vercel cold-starts separately.
 
