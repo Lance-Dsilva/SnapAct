@@ -26,7 +26,8 @@ export function getConfig() {
 
     demoUserId: process.env.DEMO_USER_ID?.trim() || "demo-user",
     httpTimeoutMs: Number(process.env.HTTP_TIMEOUT_MS || 30000),
-    maxImageBytes: Number(process.env.MAX_IMAGE_BYTES || 12 * 1024 * 1024),
+    // Vercel hard-rejects request bodies over ~4.5MB; see PLATFORM_BODY_LIMIT_BYTES.
+    maxImageBytes: Number(process.env.MAX_IMAGE_BYTES || 4 * 1024 * 1024),
     signedUrlTtlSeconds: Number(process.env.SIGNED_URL_TTL_SECONDS || 60 * 60 * 24),
   };
 }

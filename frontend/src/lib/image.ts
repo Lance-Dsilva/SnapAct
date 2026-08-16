@@ -1,3 +1,4 @@
+import sharp from "sharp";
 import { getConfig } from "@/lib/config";
 
 const SIGNATURES: Array<{ mime: string; test: (b: Buffer) => boolean }> = [
@@ -17,6 +18,17 @@ export interface ValidatedImage {
 }
 
 /**
+ * Vercel rejects function request bodies over ~4.5MB with a plain-text 413 before
+ * any of our code runs — measured: 4.08MB passes, 5.10MB fails. Keeping our own
+ * limit just below that means an oversized screenshot gets a JSON error
+ * explaining the fix, instead of an unparseable platform error.
+ */
+export const PLATFORM_BODY_LIMIT_BYTES = 4 * 1024 * 1024;
+
+const CONVERT_HINT =
+  "Add a “Convert Image” action (to JPEG) in your Shortcut before the request — it fixes this and makes uploads much faster.";
+
+/**
  * Trust the file's magic bytes over its declared Content-Type — iOS Shortcuts
  * routinely mislabels HEIC and PNG.
  */
@@ -25,18 +37,33 @@ export async function validateImage(file: File): Promise<ValidatedImage> {
   const buffer = Buffer.from(await file.arrayBuffer());
 
   if (!buffer.length) throw new Error("The uploaded image is empty.");
-  if (buffer.length > cfg.maxImageBytes) {
-    const mb = (cfg.maxImageBytes / (1024 * 1024)).toFixed(0);
-    throw new Error(`Image is too large (max ${mb}MB).`);
+
+  const limit = Math.min(cfg.maxImageBytes, PLATFORM_BODY_LIMIT_BYTES);
+  if (buffer.length > limit) {
+    const mb = (buffer.length / (1024 * 1024)).toFixed(1);
+    throw new Error(
+      `That screenshot is ${mb}MB — the upload limit is ${(limit / (1024 * 1024)).toFixed(0)}MB. ${CONVERT_HINT}`,
+    );
   }
-  // Guards against the 70-byte placeholder uploads that polluted the old store.
+  // Guards against the tiny placeholder uploads that polluted the old store.
   if (buffer.length < 1024) {
     throw new Error("The uploaded image is too small to be a real screenshot.");
   }
 
   const detected = SIGNATURES.find((sig) => sig.test(buffer));
   if (!detected) {
-    throw new Error("Unsupported image format. Use PNG, JPEG, WebP, or HEIC.");
+    throw new Error("Unsupported image format. Use PNG, JPEG, or WebP.");
+  }
+
+  // The vision model cannot read HEIC. Convert it here so the failure surfaces
+  // now with an actionable message, rather than 20s later in the background.
+  if (detected.mime === "image/heic") {
+    try {
+      const converted = await sharp(buffer).jpeg({ quality: 85 }).toBuffer();
+      return { bytes: converted, mime: "image/jpeg", size: converted.length };
+    } catch {
+      throw new Error(`SnapAct cannot read HEIC images. ${CONVERT_HINT}`);
+    }
   }
 
   return { bytes: buffer, mime: detected.mime, size: buffer.length };
