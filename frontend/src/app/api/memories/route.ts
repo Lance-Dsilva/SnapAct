@@ -4,6 +4,7 @@ import { getMemoryStore } from "@/lib/memory/memory-store";
 import type { MemoryRecord } from "@/lib/schemas/memory";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 function serialize(mem: MemoryRecord) {
   return {

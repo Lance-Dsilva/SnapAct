@@ -76,10 +76,7 @@ export default function HomeClient() {
       const [, mems] = await Promise.all([fetchHealth().catch(() => null), listMemories()]);
       const live = mems.memories.filter((m) => {
         const blob = `${m.title} ${m.description}`;
-        return (
-          !/analysis is running in the background/i.test(blob) &&
-          m.title !== "Saved screenshot"
-        );
+        return !/analysis is running in the background/i.test(blob);
       });
       const tomorrow = addDaysYmd(null, 1);
       const today = addDaysYmd(null, 0);

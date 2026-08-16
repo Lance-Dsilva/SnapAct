@@ -70,7 +70,7 @@ function titleFromHit(hit: RagSearchHit, contentType: string) {
   ) as string | undefined;
   if (explicit) return explicit;
   const line = hit.description.split(/[.!\n]/)[0]?.trim();
-  if (line) return line.slice(0, 80);
+  if (line && !/^saved screenshot$/i.test(line)) return line.slice(0, 80);
   if (contentType === "quote") return "Saved quote";
   return hit.memory_id.slice(0, 12);
 }
@@ -296,7 +296,6 @@ export class MemoryStore {
           imagePath,
           contentType: input.contentType,
           description: [
-            "Saved screenshot",
             analysis?.title,
             (input.metadata.description as string) || analysis?.description,
             input.searchableText,
@@ -387,24 +386,20 @@ export class MemoryStore {
     if (cfg.memorySearchEndpoint && !cfg.memoryListEndpoint) {
       try {
         const filterType = String(input.filters?.content_type || "").trim();
-        const probes = filterType
-          ? [filterType]
-          : ["screenshot", "event", "quote", "place", "research", "remember"];
-        const batches = await Promise.all(
-          probes.map((query) =>
-            ragSearch({ query, topK: 12 }).catch((error) => {
-              console.warn(`RAG list probe failed query=${query}`, error);
-              return [] as RagSearchHit[];
-            }),
-          ),
-        );
+        const probes = filterType ? [filterType] : ["event", "screenshot"];
         const byId = new Map<string, MemoryRecord>();
-        for (const hit of batches.flat()) {
-          const record = this.hitToRecord(hit, input.userId);
-          if (isUnfinishedMemory(record)) continue;
-          const prev = byId.get(record.memory_id);
-          if (!prev || (prev.created_at || "") < (record.created_at || "")) {
-            byId.set(record.memory_id, record);
+        for (const query of probes) {
+          const hits = await ragSearch({ query, topK: 12 }).catch((error) => {
+            console.warn(`RAG list probe failed query=${query}`, error);
+            return [] as RagSearchHit[];
+          });
+          for (const hit of hits) {
+            const record = this.hitToRecord(hit, input.userId);
+            if (isUnfinishedMemory(record)) continue;
+            const prev = byId.get(record.memory_id);
+            if (!prev || (prev.created_at || "") < (record.created_at || "")) {
+              byId.set(record.memory_id, record);
+            }
           }
         }
         for (const mem of store().memories.values()) {
