@@ -1,4 +1,5 @@
 import { getConfig } from "@/lib/config";
+import { signScreenshotUrl } from "@/lib/memory/supabase-storage";
 
 export type RagIndexResult = {
   memory_id: string;
@@ -139,6 +140,32 @@ export async function ragIndex(input: {
   };
 }
 
+function imagePathCandidates(hit: RagSearchHit): string[] {
+  const nested = asRecord(hit.metadata);
+  const explicit =
+    pickString(hit.raw, ["image_path", "imagePath"]) ||
+    pickString(nested, ["image_path", "imagePath"]);
+  const externalId =
+    pickString(hit.raw, ["external_id"]) ||
+    pickString(nested, ["external_id"]) ||
+    hit.memory_id;
+  const out: string[] = [];
+  if (explicit) out.push(explicit);
+  if (externalId) {
+    for (const ext of ["png", "jpg", "jpeg", "webp"]) out.push(`${externalId}.${ext}`);
+  }
+  return [...new Set(out)];
+}
+
+async function withSignedImage(hit: RagSearchHit): Promise<RagSearchHit> {
+  if (hit.image_url && /^https?:\/\//i.test(hit.image_url)) return hit;
+  for (const path of imagePathCandidates(hit)) {
+    const signed = await signScreenshotUrl(path);
+    if (signed) return { ...hit, image_url: signed };
+  }
+  return hit;
+}
+
 export async function ragSearch(input: {
   query: string;
   topK?: number;
@@ -160,5 +187,6 @@ export async function ragSearch(input: {
     throw new Error(`RAG search failed (${res.status}): ${text.slice(0, 400)}`);
   }
   const payload = await res.json();
-  return extractItems(payload).map((item, index) => normalizeHit(item, index));
+  const hits = extractItems(payload).map((item, index) => normalizeHit(item, index));
+  return Promise.all(hits.map((hit) => withSignedImage(hit)));
 }

@@ -1,5 +1,16 @@
 /** Server-side configuration for SnapAct (never expose CURSOR_API_KEY to the client). */
 
+function httpUrl(value?: string) {
+  const raw = (value || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? raw : "";
+  } catch {
+    return "";
+  }
+}
+
 export function getConfig() {
   return {
     cursorApiKey: process.env.CURSOR_API_KEY?.trim() || "",
@@ -7,13 +18,13 @@ export function getConfig() {
     cursorSearchModel: process.env.CURSOR_SEARCH_MODEL?.trim() || "composer-2.5",
     useMockCursor: (process.env.USE_MOCK_CURSOR || "").toLowerCase() === "true",
     demoUserId: process.env.DEMO_USER_ID?.trim() || "demo-user",
-    memorySaveEndpoint: process.env.MEMORY_SAVE_ENDPOINT?.trim() || "",
-    memorySearchEndpoint: process.env.MEMORY_SEARCH_ENDPOINT?.trim() || "",
-    memoryListEndpoint: process.env.MEMORY_LIST_ENDPOINT?.trim() || "",
-    memoryGetEndpoint: process.env.MEMORY_GET_ENDPOINT?.trim() || "",
-    memoryUpdateEndpoint: process.env.MEMORY_UPDATE_ENDPOINT?.trim() || "",
+    memorySaveEndpoint: httpUrl(process.env.MEMORY_SAVE_ENDPOINT),
+    memorySearchEndpoint: httpUrl(process.env.MEMORY_SEARCH_ENDPOINT),
+    memoryListEndpoint: httpUrl(process.env.MEMORY_LIST_ENDPOINT),
+    memoryGetEndpoint: httpUrl(process.env.MEMORY_GET_ENDPOINT),
+    memoryUpdateEndpoint: httpUrl(process.env.MEMORY_UPDATE_ENDPOINT),
     memoryApiKey: process.env.MEMORY_API_KEY?.trim() || process.env.SUPABASE_PUBLISHABLE_KEY?.trim() || "",
-    supabaseUrl: process.env.SUPABASE_URL?.trim() || "",
+    supabaseUrl: httpUrl(process.env.SUPABASE_URL),
     supabasePublishableKey: process.env.SUPABASE_PUBLISHABLE_KEY?.trim() || "",
     supabaseSecretKey: process.env.SUPABASE_SECRET_KEY?.trim() || "",
     supabaseBucket: process.env.SUPABASE_BUCKET?.trim() || "screenshots",

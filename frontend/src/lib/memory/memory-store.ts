@@ -376,7 +376,7 @@ export class MemoryStore {
     const cfg = getConfig();
     if (cfg.memorySearchEndpoint && !cfg.memoryListEndpoint) {
       try {
-        const topK = Math.min(Math.max(input.limit ?? 8, 1), 8);
+        const topK = Math.min(Math.max(input.limit ?? 20, 1), 40);
         const filterType = String(input.filters?.content_type || "").trim();
         const query = filterType || "screenshot";
         const hits = await ragSearch({ query, topK });
