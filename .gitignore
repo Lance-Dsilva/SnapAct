@@ -16,3 +16,5 @@ frontend/.next/
 frontend/out/
 *.log
 .vercel
+supabase/.temp/
+supabase/.branches/
