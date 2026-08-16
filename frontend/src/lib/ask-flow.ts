@@ -29,7 +29,7 @@ export async function retrieveAskMemories(question: string, topK = 8): Promise<A
       memory_id: hit.memory_id,
       title: String(analysis?.title || meta.title || hit.memory_id),
       description: String(analysis?.description || meta.description || ""),
-      image_url: hit.image_url,
+      image_url: hit.image_url ?? null,
       content_type: String(analysis?.content_type || meta.content_type || "other"),
       intent_mode: String(analysis?.intent_mode || meta.intent_mode || "REMEMBER"),
       score: hit.score,
