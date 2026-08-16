@@ -378,7 +378,7 @@ export class MemoryStore {
       try {
         const topK = Math.min(Math.max(input.limit ?? 20, 1), 40);
         const filterType = String(input.filters?.content_type || "").trim();
-        const query = filterType || "events places quotes tickets restaurants screenshots";
+        const query = filterType || "event";
         const hits = await ragSearch({ query, topK });
         let records = hits
           .map((hit) => this.hitToRecord(hit, input.userId))
