@@ -35,6 +35,22 @@ export function isYmd(value: unknown, targetYmd: string) {
   return String(value || "").slice(0, 10) === targetYmd;
 }
 
+export function userAskedForFollowUp(mem: {
+  user_description?: string | null;
+  analysis?: { temporal?: Record<string, unknown> | null } | null;
+  metadata?: Record<string, unknown>;
+}) {
+  const blob = [
+    mem.user_description,
+    mem.metadata?.user_description,
+    mem.analysis?.temporal?.due_label,
+    (mem.metadata?.temporal as { due_label?: string } | undefined)?.due_label,
+  ]
+    .map((value) => String(value || "").toLowerCase())
+    .join(" ");
+  return /\b(tomorrow|today|next week)\b/.test(blob);
+}
+
 export function dueAtFromMemory(mem: {
   analysis?: { temporal?: Record<string, unknown> | null; suggested_actions?: Array<{ due_at?: string | null }> } | null;
   metadata?: Record<string, unknown>;
@@ -77,15 +93,19 @@ export function applyUserNoteTiming<
     short_message?: string | null;
   },
 >(analysis: T, note: string | null | undefined, capturedAt?: string | null): T {
-  const trimmed = note?.trim();
-  if (!trimmed) return analysis;
-
-  const due = inferDueAt(trimmed, capturedAt) || String(analysis.temporal?.due_at || "").slice(0, 10) || null;
-  if (trimmed && !analysis.description.toLowerCase().includes(trimmed.toLowerCase().slice(0, 40))) {
-    analysis.description = `${trimmed.replace(/^remember this screenshot as\s+/i, "Remember: ")} ${analysis.description}`.trim();
+  const trimmed = note?.trim() || "";
+  const due = inferDueAt(trimmed, capturedAt);
+  if (!due) {
+    if (analysis.temporal && typeof analysis.temporal === "object") {
+      const next = { ...analysis.temporal };
+      delete next.due_at;
+      delete next.due_label;
+      delete next.reminder;
+      analysis.temporal = Object.keys(next).length ? next : null;
+    }
+    analysis.suggested_actions = analysis.suggested_actions.filter((a) => !a.due_at);
+    return analysis;
   }
-
-  if (!due) return analysis;
 
   const label = dueLabel(trimmed, due);
   analysis.temporal = {

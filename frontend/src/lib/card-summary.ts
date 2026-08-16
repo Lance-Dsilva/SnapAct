@@ -9,11 +9,11 @@ export function cardSummary(input: {
   const meta = input.metadata || {};
   const candidates = [
     typeof meta.summary === "string" ? meta.summary : "",
-    input.analysis?.intent_summary || "",
-    input.user_description || (typeof meta.user_description === "string" ? meta.user_description : ""),
     input.analysis?.description || "",
     input.description || "",
-  ];
+    input.analysis?.intent_summary || "",
+    input.user_description || (typeof meta.user_description === "string" ? meta.user_description : ""),
+  ].filter((value) => value.trim() && !isInternalNote(value));
   const raw = candidates.find((value) => value.trim()) || "";
   return shortenIndexBlob(raw, input.title || "");
 }
@@ -27,6 +27,9 @@ export function shortenIndexBlob(text: string, title = "") {
   t = t.replace(/User question:.*$/i, "");
   t = t.replace(/Category:\s*\w+\.?/gi, "");
   t = t.replace(/Intent:\s*\w+\.?/gi, "");
+  t = t.replace(/remember this rag[^.]*\.?/gi, "");
+  t = t.replace(/latest-first test[^.]*\.?/gi, "");
+  t = t.replace(/^remember this (screenshot )?as\s+/i, "");
   if (title) {
     const re = new RegExp(`^${escapeReg(title)}[.\\s:-]*`, "i");
     t = t.replace(re, "");
@@ -42,6 +45,10 @@ export function shortenIndexBlob(text: string, title = "") {
     if (uniq.length >= 2) break;
   }
   return (uniq.join(" ") || t).slice(0, 180).trim();
+}
+
+function isInternalNote(value: string) {
+  return /latest-first test|remember this rag screenshot uploaded now/i.test(value);
 }
 
 function escapeReg(value: string) {

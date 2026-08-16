@@ -39,6 +39,31 @@ function isUnfinishedMemory(mem: {
   );
 }
 
+const HIDDEN_TEST_IDS = new Set(
+  [
+    "ED25E365-E73D-4390-AAF8-5A0309D08703",
+    "D357606A-B345-40B6-B788-392E52B6BABE",
+    "b59fa50f-9246-4d8e-8ab6-f8b8a7a8ef8d",
+    "9e4d237b-0e7f-466a-bf11-12185f60cd8f",
+  ].map((id) => id.toLowerCase()),
+);
+
+function isHiddenTestMemory(mem: {
+  memory_id?: string;
+  metadata?: Record<string, unknown>;
+  analysis?: MemoryAnalysis | null;
+}) {
+  const ids = [
+    mem.memory_id,
+    mem.metadata?.external_id,
+    mem.metadata?.client_request_id,
+  ].map((value) => String(value || "").toLowerCase());
+  if (ids.some((id) => HIDDEN_TEST_IDS.has(id))) return true;
+  if (String(mem.metadata?.source || mem.analysis?.source || "") === "test") return true;
+  const blob = `${mem.analysis?.title || ""} ${JSON.stringify(mem.metadata || {})}`.toLowerCase();
+  return /latest-first test/.test(blob);
+}
+
 function inferContentType(hit: RagSearchHit): string {
   const cat = String(hit.category || hit.metadata.category || "").toLowerCase();
   const known = [
@@ -365,7 +390,12 @@ export class MemoryStore {
         });
         return hits
           .map((item) => this.hitToSearch(item))
-          .filter((hit) => (input.requireImage === false || Boolean(hit.image_url)) && !isUnfinishedMemory(hit));
+          .filter(
+            (hit) =>
+              (input.requireImage === false || Boolean(hit.image_url)) &&
+              !isUnfinishedMemory(hit) &&
+              !isHiddenTestMemory(hit),
+          );
       } catch (error) {
         console.warn("RAG search failed; falling back to mock store", error);
         if (usingRemoteMemory()) return [];
@@ -394,7 +424,7 @@ export class MemoryStore {
           });
           for (const hit of hits) {
             const record = this.hitToRecord(hit, input.userId);
-            if (isUnfinishedMemory(record)) continue;
+            if (isUnfinishedMemory(record) || isHiddenTestMemory(record)) continue;
             const prev = byId.get(record.memory_id);
             if (!prev || (prev.created_at || "") < (record.created_at || "")) {
               byId.set(record.memory_id, record);
@@ -402,7 +432,7 @@ export class MemoryStore {
           }
         }
         for (const mem of store().memories.values()) {
-          if (mem.user_id !== input.userId || isUnfinishedMemory(mem)) continue;
+          if (mem.user_id !== input.userId || isUnfinishedMemory(mem) || isHiddenTestMemory(mem)) continue;
           byId.set(mem.memory_id, mem);
         }
         let records = [...byId.values()].sort((a, b) => (a.created_at < b.created_at ? 1 : -1));

@@ -70,19 +70,17 @@ export function buildScreenshotUserPrompt(input: {
     parts.push(
       "",
       `User description / context (HIGH VALUE): ${input.userDescription}`,
-      "Reframe that note into a clear stored description (do not copy slang verbatim).",
-      "Incorporate it into intent_summary, description, tags, and searchable_text.",
-      "If they mention today / tomorrow / next week, resolve it using Captured at.",
-      "Set temporal.due_at to YYYY-MM-DD, intent_mode ACT, actionable true.",
-      "Add a suggested_action type research (or remind) with the same due_at.",
-      "Put the due date in searchable_text so it can be retrieved as a to-do.",
+      "Write description as 1-2 plain sentences about what is on the screenshot.",
+      "Do not paste the user note verbatim and do not mention tests or upload timestamps.",
+      "Only if the user note literally contains today, tomorrow, or next week: set temporal.due_at (YYYY-MM-DD from Captured at), intent_mode ACT, and a research/remind suggested_action.",
+      "Otherwise temporal.due_at must be null. Do not invent a due date.",
     );
   } else {
     parts.push("Save and organize this screenshot with structured metadata.");
     if (input.userDescription) {
       parts.push(
         `Optional user note: ${input.userDescription}`,
-        "If the note mentions today / tomorrow / next week, set temporal.due_at (YYYY-MM-DD from Captured at) and a research/remind suggested_action.",
+        "If the note literally contains today / tomorrow / next week, set temporal.due_at (YYYY-MM-DD from Captured at) and a research/remind suggested_action. Otherwise do not set a due date.",
       );
     }
   }

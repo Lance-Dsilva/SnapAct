@@ -17,7 +17,7 @@ import {
 } from "@/components/Icons";
 import { fetchHealth, listMemories } from "@/lib/api";
 import { cardSummary } from "@/lib/card-summary";
-import { addDaysYmd, dueAtFromMemory } from "@/lib/due-date";
+import { addDaysYmd, dueAtFromMemory, userAskedForFollowUp } from "@/lib/due-date";
 import type { AttentionItem, HomeFeedPlan, MemoryDetail } from "@/types";
 
 const FILTERS = [
@@ -106,7 +106,7 @@ export default function HomeClient() {
       const todos = live
         .filter((m) => {
           const due = dueAtFromMemory(m);
-          return due === tomorrow || due === today;
+          return (due === tomorrow || due === today) && userAskedForFollowUp(m);
         })
         .map((m) => {
           const due = dueAtFromMemory(m);
