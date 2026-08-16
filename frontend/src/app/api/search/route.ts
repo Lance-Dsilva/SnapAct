@@ -1,47 +1,53 @@
 import { NextResponse } from "next/server";
 import { getConfig } from "@/lib/config";
-import { getMemoryStore } from "@/lib/memory/memory-store";
+import { retrieve } from "@/lib/retrieval/retrieve";
+import { serializeRetrieved } from "@/lib/serialize";
 
 export const runtime = "nodejs";
+export const maxDuration = 120;
 
-export async function POST(req: Request) {
+async function search(query: string, limit: number, gate: boolean) {
+  const cfg = getConfig();
+  const found = await retrieve({
+    userId: cfg.demoUserId,
+    question: query,
+    limit,
+    useGate: gate,
+  });
+  return NextResponse.json({
+    query,
+    results: found.memories.map(serializeRetrieved),
+    considered: found.candidatesConsidered,
+    rejected: found.rejected,
+    filtered_to_nothing: found.filteredToNothing,
+    plan: found.plan,
+  });
+}
+
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const query = (searchParams.get("q") || searchParams.get("query") || "").trim();
+  if (!query) return NextResponse.json({ error: "q is required" }, { status: 400 });
   try {
-    const body = await req.json();
-    const query = String(body.query || "").trim();
-    const topK = Number(body.top_k || body.topK || 8);
-    if (!query) {
-      return NextResponse.json({ detail: "query is required" }, { status: 400 });
-    }
-
-    const cfg = getConfig();
-    const store = getMemoryStore();
-    const hits = await store.searchMemories({
-      userId: cfg.demoUserId,
-      query,
-      topK,
-      filters: body.filters || {},
-    });
-
-    const results = hits.map((hit) => {
-      const meta = hit.metadata || {};
-      const analysis = hit.analysis;
-      return {
-        memory_id: hit.memory_id,
-        title: analysis?.title || meta.title || hit.memory_id,
-        description: analysis?.description || meta.description || "",
-        image_url: hit.image_url,
-        content_type: analysis?.content_type || meta.content_type || "other",
-        intent_mode: analysis?.intent_mode || meta.intent_mode || "REMEMBER",
-        score: hit.score,
-        tags: analysis?.tags || meta.tags || [],
-        metadata: meta,
-      };
-    });
-
-    return NextResponse.json({ query, results });
+    // Browsing the search box: keep it fast and permissive, no gate.
+    return await search(query, Number(searchParams.get("limit") || 20), false);
   } catch (err) {
     return NextResponse.json(
-      { detail: err instanceof Error ? err.message : "Search failed" },
+      { error: err instanceof Error ? err.message : "Search failed" },
+      { status: 502 },
+    );
+  }
+}
+
+export async function POST(req: Request) {
+  const body = await req.json().catch(() => ({}));
+  const query = String(body.query || body.q || "").trim();
+  if (!query) return NextResponse.json({ error: "query is required" }, { status: 400 });
+  try {
+    return await search(query, Number(body.limit || body.top_k || 20), body.gate !== false);
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Search failed" },
       { status: 502 },
     );
   }

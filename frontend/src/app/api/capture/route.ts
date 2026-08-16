@@ -1,4 +1,4 @@
-import { handleCapture } from "@/lib/capture-handler";
+import { handleCapture } from "@/lib/capture";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;

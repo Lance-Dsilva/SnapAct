@@ -1,154 +1,170 @@
 "use client";
 
 import Link from "next/link";
-import type { AttentionItem, MemoryDetail } from "@/types";
-import { intentColor, typeLabel } from "@/lib/labels";
+import { CATEGORIES, intentColor, relativeDay, typeLabel, urgencyColor } from "@/lib/labels";
+import type { Memory, RetrievedMemory } from "@/types";
 
 export function SectionTitle({
   title,
   subtitle,
+  count,
 }: {
   title: string;
   subtitle?: string;
+  count?: number;
 }) {
   return (
     <div className="mb-4">
-      <h2 className="font-[family-name:var(--font-display)] text-xl text-[var(--ink)] sm:text-2xl">
-        {title}
-      </h2>
+      <div className="flex items-baseline gap-2">
+        <h2 className="text-xl text-[var(--ink)] sm:text-2xl">{title}</h2>
+        {count !== undefined ? (
+          <span className="text-sm text-[var(--muted)]">{count}</span>
+        ) : null}
+      </div>
       {subtitle ? <p className="mt-1 text-sm text-[var(--muted)]">{subtitle}</p> : null}
     </div>
   );
 }
 
-export function AttentionCard({
-  item,
+function Thumb({ memory, className }: { memory: Memory; className?: string }) {
+  if (!memory.image_url) {
+    return (
+      <div className={`flex items-center justify-center bg-[var(--surface-soft)] ${className}`}>
+        <span className="text-xs text-[var(--muted)]">{typeLabel(memory.content_type)}</span>
+      </div>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={memory.image_url} alt="" loading="lazy" className={`object-cover ${className}`} />
+  );
+}
+
+/** A memory that needs doing, with its deadline and its one real action. */
+export function ActionCard({
+  memory,
   onDone,
 }: {
-  item: AttentionItem;
+  memory: Memory;
   onDone?: (id: string) => void;
 }) {
+  const action = memory.suggested_actions?.[0];
+  const when = memory.due_on || memory.event_on;
+  const overdue = Boolean(
+    memory.due_on && memory.due_on < new Date().toISOString().slice(0, 10),
+  );
+
   return (
-    <div className="flex items-start justify-between gap-3 rounded-2xl border border-[var(--border)] bg-white p-4 shadow-[var(--shadow)]">
-      <div className="min-w-0">
+    <div className="flex items-start gap-3 rounded-2xl border border-[var(--border)] bg-white p-4 shadow-[var(--shadow)]">
+      <Link href={`/memory/${memory.id}`} className="shrink-0">
+        <Thumb memory={memory} className="h-14 w-14 rounded-xl" />
+      </Link>
+
+      <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <Link
-            href={`/memory/${item.memory_id}`}
+            href={`/memory/${memory.id}`}
             className="truncate font-medium text-[var(--ink)] hover:text-[var(--accent-dark)]"
           >
-            {item.title}
+            {memory.title}
           </Link>
-          {item.intent_mode ? (
+          {when ? (
             <span
-              className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold tracking-wide ${intentColor(item.intent_mode)}`}
+              className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                overdue ? "border-rose-200 bg-rose-50 text-rose-700" : urgencyColor(memory.urgency)
+              }`}
             >
-              {item.intent_mode}
+              {overdue ? "Overdue " : ""}
+              {relativeDay(when)}
             </span>
           ) : null}
         </div>
-        <p className="mt-1 text-sm text-[var(--muted)]">{item.reason}</p>
-      </div>
-      <div className="flex shrink-0 gap-2">
-        <Link
-          href={`/memory/${item.memory_id}`}
-          className="rounded-full border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--ink)] hover:bg-slate-50"
-        >
-          View
-        </Link>
-        {onDone ? (
-          <button
-            type="button"
-            onClick={() => onDone(item.memory_id)}
-            className="rounded-full bg-teal-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-700"
-          >
-            Done
-          </button>
-        ) : null}
+        <p className="mt-1 line-clamp-2 text-sm text-[var(--muted)]">
+          {memory.intent_summary || memory.description}
+        </p>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {action?.url ? (
+            <a
+              href={action.url}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-full bg-[var(--ink)] px-3 py-1.5 text-xs font-medium text-white"
+            >
+              {action.label}
+            </a>
+          ) : null}
+          {onDone ? (
+            <button
+              type="button"
+              onClick={() => onDone(memory.id)}
+              className="rounded-full border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--ink)] hover:bg-slate-50"
+            >
+              Mark done
+            </button>
+          ) : null}
+        </div>
       </div>
     </div>
   );
 }
 
-export function EventCard({ item }: { item: AttentionItem }) {
+export function EventCard({ memory }: { memory: Memory }) {
+  const event = (memory.event || {}) as Record<string, string>;
   return (
     <Link
-      href={`/memory/${item.memory_id}`}
+      href={`/memory/${memory.id}`}
       className="group overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-[var(--shadow)] transition hover:-translate-y-0.5 hover:shadow-md"
     >
-      <div className="aspect-[16/10] bg-[var(--surface-soft)]">
-        {item.image_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={item.image_url}
-            alt=""
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-sm text-[var(--muted)]">
-            Event
-          </div>
-        )}
-      </div>
+      <Thumb memory={memory} className="aspect-[16/10] w-full" />
       <div className="p-4">
         <div className="text-xs font-semibold uppercase tracking-wide text-teal-700">
-          Event
+          {memory.event_on ? relativeDay(memory.event_on) : "Event"}
         </div>
-        <h3 className="mt-1 font-medium text-[var(--ink)] group-hover:text-[var(--accent-dark)]">
-          {item.title}
+        <h3 className="mt-1 line-clamp-2 font-medium text-[var(--ink)] group-hover:text-[var(--accent-dark)]">
+          {memory.title}
         </h3>
-        <p className="mt-1 text-sm text-[var(--muted)]">{item.reason}</p>
-        {item.suggested_action ? (
-          <div className="mt-3 inline-flex rounded-full bg-teal-50 px-3 py-1 text-xs font-medium text-teal-800">
-            {item.suggested_action.label}
-          </div>
+        {event.location ? (
+          <p className="mt-1 truncate text-sm text-[var(--muted)]">{event.location}</p>
         ) : null}
       </div>
     </Link>
   );
 }
 
-export function QuoteCard({ item }: { item: AttentionItem }) {
+export function QuoteCard({ memory }: { memory: Memory }) {
+  // The quote text itself is the OCR, not the generated title.
+  const text = memory.ocr_text?.trim() || memory.title;
   return (
     <Link
-      href={`/memory/${item.memory_id}`}
+      href={`/memory/${memory.id}`}
       className="block rounded-2xl border border-[var(--border)] bg-gradient-to-br from-white to-teal-50/60 p-5 shadow-[var(--shadow)]"
     >
-      <p className="font-[family-name:var(--font-quote)] text-xl leading-snug text-[var(--ink)] sm:text-2xl">
-        “{item.title}”
-      </p>
-      <p className="mt-3 text-xs uppercase tracking-[0.14em] text-teal-700">
-        Saved quote
-      </p>
+      <p className="line-clamp-4 text-lg leading-snug text-[var(--ink)]">“{text}”</p>
+      <p className="mt-3 text-xs uppercase tracking-[0.14em] text-teal-700">Saved quote</p>
     </Link>
   );
 }
 
-export function MemoryGridCard({ memory }: { memory: MemoryDetail }) {
+export function MemoryGridCard({ memory }: { memory: Memory }) {
   return (
     <Link
-      href={`/memory/${memory.memory_id}`}
+      href={`/memory/${memory.id}`}
       className="overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-[var(--shadow)] transition hover:-translate-y-0.5 hover:shadow-md"
     >
-      <div className="aspect-[4/3] bg-[var(--surface-soft)]">
-        {memory.image_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={memory.image_url} alt="" className="h-full w-full object-cover" />
-        ) : null}
-      </div>
+      <Thumb memory={memory} className="aspect-[4/3] w-full" />
       <div className="p-3">
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
             {typeLabel(memory.content_type)}
           </span>
-          {memory.demo_seed ? (
+          {memory.status === "failed" ? (
             <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800">
-              Demo seed
+              Needs retry
             </span>
           ) : null}
         </div>
-        <h3 className="mt-1 line-clamp-2 text-sm font-medium text-[var(--ink)]">
-          {memory.title}
-        </h3>
+        <h3 className="mt-1 line-clamp-2 text-sm font-medium text-[var(--ink)]">{memory.title}</h3>
         <span
           className={`mt-2 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${intentColor(memory.intent_mode)}`}
         >
@@ -159,26 +175,48 @@ export function MemoryGridCard({ memory }: { memory: MemoryDetail }) {
   );
 }
 
+/** Search / Ask result, showing why it matched. */
+export function ResultCard({ memory }: { memory: RetrievedMemory }) {
+  return (
+    <Link
+      href={`/memory/${memory.id}`}
+      className="flex gap-3 rounded-2xl border border-[var(--border)] bg-white p-3 shadow-[var(--shadow)] transition hover:shadow-md"
+    >
+      <Thumb memory={memory} className="h-16 w-16 shrink-0 rounded-xl" />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+            {typeLabel(memory.content_type)}
+          </span>
+          {memory.relevance === "primary" ? (
+            <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[10px] font-medium text-teal-800">
+              Best match
+            </span>
+          ) : null}
+        </div>
+        <h3 className="mt-0.5 truncate text-sm font-medium text-[var(--ink)]">{memory.title}</h3>
+        <p className="mt-0.5 line-clamp-2 text-xs text-[var(--muted)]">
+          {memory.relevance_reason || memory.description}
+        </p>
+      </div>
+    </Link>
+  );
+}
+
 export function CategoryPills({
   active,
+  counts,
   onChange,
 }: {
   active: string;
+  counts?: Record<string, number>;
   onChange: (id: string) => void;
 }) {
-  const cats = [
-    { id: "all", label: "All" },
-    { id: "event", label: "Events" },
-    { id: "quote", label: "Quotes" },
-    { id: "person_followup", label: "People" },
-    { id: "place", label: "Places" },
-    { id: "idea", label: "Ideas" },
-    { id: "product", label: "Products" },
-    { id: "knowledge", label: "Knowledge" },
-  ];
+  // Only show a category the user actually has something in.
+  const visible = CATEGORIES.filter((c) => c.id === "all" || (counts?.[c.id] ?? 0) > 0);
   return (
     <div className="flex gap-2 overflow-x-auto pb-1">
-      {cats.map((c) => (
+      {visible.map((c) => (
         <button
           key={c.id}
           type="button"
@@ -190,49 +228,20 @@ export function CategoryPills({
           }`}
         >
           {c.label}
+          {c.id !== "all" && counts?.[c.id] ? (
+            <span className="ml-1.5 text-[11px] opacity-60">{counts[c.id]}</span>
+          ) : null}
         </button>
       ))}
     </div>
   );
 }
 
-export function AgentSteps({
-  steps,
-  web,
-  liveFailed,
+export function SourcesList({
+  citations,
 }: {
-  steps: string[];
-  web?: boolean;
-  liveFailed?: boolean;
+  citations?: Array<{ title?: string | null; url: string }> | null;
 }) {
-  const researched =
-    web || steps.some((s) => /research|search|web|external/i.test(s));
-  return (
-    <div className="rounded-2xl border border-[var(--border)] bg-white p-4 shadow-[var(--shadow)]">
-      <h3 className="text-sm font-semibold text-[var(--ink)]">Grok activity</h3>
-      <ul className="mt-3 space-y-2">
-        {steps.map((step) => (
-          <li key={step} className="flex items-start gap-2 text-sm text-[var(--ink)]">
-            <span className="mt-0.5 text-teal-600">✓</span>
-            <span>{step}</span>
-          </li>
-        ))}
-      </ul>
-      {researched ? (
-        <p className="mt-3 text-xs font-medium text-teal-700">
-          Current information checked · Web
-        </p>
-      ) : null}
-      {liveFailed ? (
-        <p className="mt-2 text-xs text-amber-700">
-          Live verification is temporarily unavailable.
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-export function SourcesList({ citations }: { citations: { title?: string | null; url: string }[] }) {
   if (!citations?.length) return null;
   return (
     <div className="rounded-2xl border border-[var(--border)] bg-white p-4 shadow-[var(--shadow)]">
@@ -251,6 +260,15 @@ export function SourcesList({ citations }: { citations: { title?: string | null;
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+export function EmptyState({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-soft)] p-8 text-center">
+      <p className="font-medium text-[var(--ink)]">{title}</p>
+      <p className="mx-auto mt-1 max-w-md text-sm text-[var(--muted)]">{body}</p>
     </div>
   );
 }

@@ -14,7 +14,7 @@ export default function UploadClient() {
   const [preview, setPreview] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>("save");
   const [question, setQuestion] = useState("");
-  const [userDescription, setUserDescription] = useState("");
+  const [note, setNote] = useState("");
   const [phase, setPhase] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -36,8 +36,8 @@ export default function UploadClient() {
       setError("Add a question for Ask mode.");
       return;
     }
-    if (mode === "describe" && !userDescription.trim()) {
-      setError("Add a short description for Describe & Save.");
+    if (mode === "describe" && !note.trim()) {
+      setError("Add a short note for Describe & Save.");
       return;
     }
     setBusy(true);
@@ -47,7 +47,7 @@ export default function UploadClient() {
         file,
         mode,
         question: question.trim() || undefined,
-        userDescription: userDescription.trim() || undefined,
+        note: note.trim() || undefined,
         onPhase: setPhase,
       });
       sessionStorage.setItem(`snapact:capture:${result.memory_id}`, JSON.stringify(result));
@@ -68,7 +68,7 @@ export default function UploadClient() {
           Upload Screenshot
         </h1>
         <p className="mt-2 text-sm text-[#6b7280]">
-          Judges can demo SnapAct here without the Apple Shortcut.
+          SnapAct reads the screenshot, works out what it is, and files it.
         </p>
       </div>
 
@@ -76,7 +76,7 @@ export default function UploadClient() {
         <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-[#bfdbfe] bg-[#f8fafc] px-6 py-10 text-center">
           <input
             type="file"
-            accept="image/png,image/jpeg,.png,.jpg,.jpeg"
+            accept="image/png,image/jpeg,image/webp,image/heic,.png,.jpg,.jpeg,.webp,.heic"
             className="hidden"
             onChange={(e) => onFile(e.target.files?.[0] || null)}
           />
@@ -86,7 +86,7 @@ export default function UploadClient() {
           ) : (
             <>
               <span className="text-sm font-medium text-[var(--ink)]">
-                Drop or choose a PNG / JPEG
+                Drop or choose a screenshot
               </span>
               <span className="mt-1 text-xs text-[var(--muted)]">Max ~12 MB</span>
             </>
@@ -126,8 +126,8 @@ export default function UploadClient() {
 
         {mode === "describe" || mode === "save" ? (
           <textarea
-            value={userDescription}
-            onChange={(e) => setUserDescription(e.target.value)}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
             rows={3}
             placeholder={
               mode === "describe"

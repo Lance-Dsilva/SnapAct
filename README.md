@@ -1,163 +1,158 @@
-# SnapAct — Cursor SDK architecture (hackathon)
+# SnapAct
 
-**Screenshots are unfinished intentions.**
-
-SnapAct turns screenshots into memory, answers, and actions using **GPT-5.6 Luna via the Cursor SDK**.
+**Screenshots are unfinished intentions.** SnapAct reads a screenshot, works out
+what it is and why you kept it, files it somewhere you can find again, and tells
+you when something needs doing.
 
 ```text
-Apple Shortcut / Web App
-        ↓
-Next.js API Routes (/api/*)
-        ↓
-Cursor SDK → GPT-5.6 Luna (screenshots) / Composer 2.5 (Ask)
-        ↓
-Tools (webSearch, webFetch, custom memory tools)
-        ↓
-MemoryStore adapter → Supabase HTTP gateway (or mock)
+iPhone Shortcut  /  Web upload
+        │
+        ▼
+Next.js API  ──►  Supabase Storage        (the image, private bucket)
+        │
+        ├────►  Cursor SDK · gpt-5.6-luna (read the screenshot, extract structure)
+        │
+        └────►  Postgres `memories`       (typed columns + pgvector + tsvector)
+                        │
+                        ▼
+            plan ─► hybrid search ─► relevance gate ─► answer
+                   (composer-2.5)      (composer-2.5)
 ```
 
-No authentication — all data belongs to `demo-user`.
-
-> The legacy FastAPI + direct xAI client under `backend/` is **deprecated** and not required for the demo.
+There is no auth yet — everything belongs to `DEMO_USER_ID`.
 
 ---
 
-## Local setup
+## How retrieval works, and why it works this way
+
+Three stages, each doing a job the others cannot:
+
+1. **Query planner** turns a question into a semantic query plus optional filters
+   (category, date range). Filters are advisory — if they narrow the result set
+   below three candidates, the search re-runs without them. A wrong filter must
+   never be able to hide the answer.
+2. **Hybrid search** fuses pgvector cosine neighbours with Postgres full-text
+   matches using Reciprocal Rank Fusion, and returns real scores.
+3. **Relevance gate** judges every candidate and is allowed to reject all of them.
+
+The gate is not optional, and here is the measurement that says so. On this
+corpus, `gte-small` scores an *unrelated* query/document pair as high as **0.80**,
+while a *genuine* match can sit at **0.78**. The distributions overlap, so no
+cosine threshold can separate relevant from irrelevant. `p_min_similarity`
+in the search function is a cheap tail-trim, nothing more. If results go wrong,
+fix the gate — do not tune the threshold.
+
+The visible payoff: ask SnapAct something it has nothing about and it says so,
+instead of assembling a confident answer out of whatever happened to rank first.
+
+---
+
+## Setup
+
+### 1. Database
+
+```bash
+supabase link --project-ref <your-project-ref>
+supabase db push                     # applies supabase/migrations/
+supabase functions deploy embed      # gte-small, 384-dim, no third-party API
+```
+
+Then create a **private** storage bucket named `screenshots`.
+
+### 2. App
 
 ```bash
 cd frontend
-cp .env.example .env.local
-# Set CURSOR_API_KEY + CURSOR_MODEL (or USE_MOCK_CURSOR=true)
+cp .env.example .env.local           # fill in Cursor + Supabase values
 npm install
 npm run dev
 ```
 
-App: http://localhost:3000
-
-### Cursor SDK smoke tests
+### 3. Verify
 
 ```bash
-cd frontend
-npm run list-models          # requires CURSOR_API_KEY
-# copy the vision model id into CURSOR_MODEL (default gpt-5.6-luna)
-npm run test-cursor          # expects: SNAPACT GROK WORKING
-npm run test-api-mock        # offline flow tests (mock agent)
+npm run verify                       # end-to-end checks against localhost:3000
+curl localhost:3000/api/health       # per-dependency status
 ```
 
+`npm run verify` checks the properties that matter, including that a nonsense
+question returns zero memories.
+
 ---
 
-## Environment variables
+## Environment
 
-| Variable | Where | Purpose |
+| Variable | Purpose |
+|---|---|
+| `CURSOR_API_KEY` | Cursor SDK credentials |
+| `CURSOR_MODEL` | Vision model for screenshots (`gpt-5.6-luna`) |
+| `CURSOR_SEARCH_MODEL` | Fast model for planning, gating, synthesis (`composer-2.5`) |
+| `SUPABASE_URL` | Project URL |
+| `SUPABASE_SECRET_KEY` | Service key — server only, bypasses RLS |
+| `SUPABASE_BUCKET` | Screenshot bucket (`screenshots`) |
+| `DEMO_USER_ID` | Owner id for every memory |
+| `USE_MOCK_CURSOR` | Unused by the pipeline; kept for local experiments |
+
+---
+
+## API
+
+### Capture
+
+| Endpoint | Body | Notes |
 |---|---|---|
-| `CURSOR_API_KEY` | server | Cursor API key (credits) |
-| `CURSOR_MODEL` | server | Screenshot analysis model (default `gpt-5.6-luna`) |
-| `CURSOR_SEARCH_MODEL` | server | Fast/cheap model for Ask synthesis (default `composer-2.5`) |
-| `USE_MOCK_CURSOR` | server | Offline mock without Cursor calls |
-| `DEMO_USER_ID` | server | default `demo-user` |
-| `MEMORY_*_ENDPOINT` | server | Teammate Supabase HTTP gateway |
-| `NEXT_PUBLIC_API_BASE_URL` | client | Optional; leave empty for same-origin `/api` |
+| `POST /api/shortcut/save` | `image` | Understand and file it |
+| `POST /api/shortcut/describe` | `image`, `user_note` | Save with your own context |
+| `POST /api/shortcut/ask` | `image` + `question`, or `question` alone | Ask about one screenshot, or all of them |
+| `POST /api/capture` | `image`, `mode` | Generic form used by the web UI |
 
-**Never** put `CURSOR_API_KEY` in a `NEXT_PUBLIC_` variable.
+All accept `multipart/form-data` with optional `source`, `captured_at`, and
+`client_request_id`. Analysis runs **synchronously**, so the response already
+carries the title, type, dates and actions — roughly 8–11s for a screenshot.
 
----
+`client_request_id` is enforced by a unique constraint, so a Shortcut that
+retries gets the original memory back instead of a duplicate.
 
-## API routes
+### Read
 
-| Method | Path | Notes |
-|---|---|---|
-| GET | `/api/health` | Status (no secrets) |
-| POST | `/api/capture` | Multipart save / ask / describe |
-| POST | `/api/search` | Memory search |
-| POST | `/api/ask` | Ask across memories |
-| GET | `/api/memories` | List |
-| GET | `/api/memories/[id]` | Detail |
-| POST | `/api/memories/[id]/complete` | Mark done |
-| POST | `/api/intelligence/refresh` | Home feed plan |
-
-### Capture fields (`multipart/form-data`)
-
-| Field | Required | Notes |
-|---|---|---|
-| `image` | yes | PNG/JPEG |
-| `mode` | yes | `save` \| `ask` \| `describe` |
-| `question` | if ask | User question |
-| `user_description` | if describe | User context |
-| `source` | no | `iphone` \| `mac` \| `web` |
-| `client_request_id` | no | Idempotency |
-
-All modes **save** a memory. Responses include `short_message` for Apple Shortcut **Show Result**.
+| Endpoint | Notes |
+|---|---|
+| `GET /api/memories` | Real listing: `content_type`, `limit`, `offset`, `status` |
+| `GET /api/memories/:id` | Primary-key lookup |
+| `PATCH /api/memories/:id` | Edit title, tags, note, due date |
+| `DELETE /api/memories/:id` | Removes the row and the stored image |
+| `POST /api/memories/:id/complete` | Mark an action done |
+| `GET /api/digest` | Deadlines, upcoming events, needs-a-decision — computed from indexed columns, no model call |
+| `GET /api/search` | Hybrid search, ungated (browse) |
+| `POST /api/ask` | Gated retrieval + synthesis; supports SSE streaming |
+| `GET/POST /api/memories/repair` | Inspect and retry failed analyses |
+| `GET /api/health` | Live check of database, embeddings, storage, model |
 
 ---
 
-## Apple Shortcut
+## Data model
 
-1. Share Sheet image → Choose Save / Ask / Describe  
-2. `Get Contents of URL` → `POST {origin}/api/capture` (Form)  
-3. Read `short_message` → Show Result  
+`public.memories` — one row per screenshot. The important choices:
 
----
-
-## Cursor tools available to the agent
-
-Built-in (Cursor SDK `ToolName`):
-
-- `webSearch`
-- `webFetch`
-
-Custom tools (local agent):
-
-- `search_memories`
-- `list_recent_memories`
-- `get_memory`
-
-Filesystem mutation tools (`shell`, `edit`, `delete`) are disallowed in API runs.
-
-There is **no** dedicated `x_search` tool in the Cursor SDK tool list. Live research uses `webSearch` / `webFetch`.
-
-Screenshot/image input: supported via `agent.send({ text, images: [{ data, mimeType }] })`.
+- **Taxonomy and provenance are separate columns.** `content_type` says what the
+  screenshot *is* (`event`, `place`, `product`, `quote`, `message`, …);
+  `source` and `capture_mode` say where it came from. Collapsing these into one
+  `category` field is what made the previous store unqueryable.
+- **Dates are real `date` columns**, not strings in a JSON blob. `due_on` and
+  `event_on` are indexed, so the digest is a query rather than a guess.
+- **`status` is explicit** (`pending` → `ready`, or `failed` with a reason and an
+  attempt counter). A half-written row is always visible and always retryable.
+- **`search_text`** is the retrieval blob feeding both the embedding and the
+  generated `fts` tsvector. It carries no boilerplate — a shared prefix on every
+  row would make every embedding partly identical.
 
 ---
 
-## Supabase contract (teammate)
+## iPhone Shortcut
 
-All storage goes through `src/lib/memory/memory-store.ts`.
-
-Provide:
-
-- `MEMORY_SAVE_ENDPOINT`
-- `MEMORY_SEARCH_ENDPOINT`
-- `MEMORY_LIST_ENDPOINT` (homepage)
-- `MEMORY_GET_ENDPOINT`
-- `MEMORY_UPDATE_ENDPOINT`
-
-Until then, SnapAct uses an in-memory mock with demo seeds.
-
----
-
-## Deploy (Vercel)
-
-One project: **snapact** → https://snapact-beta.vercel.app
-
-The Next.js app in `frontend/` is the UI and the API (`/api/*`, including Apple Shortcut routes). There is no second Vercel project and no FastAPI service.
-
-1. GitHub `main` deploys this project (root directory `frontend`).
-2. Set server env: `CURSOR_API_KEY`, `CURSOR_MODEL=gpt-5.6-luna`, `CURSOR_SEARCH_MODEL=composer-2.5`, `DEMO_USER_ID`, Supabase, memory endpoints.
-3. Increase function duration if needed (`maxDuration` is set on capture/ask routes).
-
-Shortcut URLs:
-
-- `POST https://snapact-beta.vercel.app/api/shortcut/save` — multipart image
-- `POST https://snapact-beta.vercel.app/api/shortcut/ask` — image+question **or** JSON `{ "question": "..." }` across memories
-- `POST https://snapact-beta.vercel.app/api/shortcut/describe` — multipart image
-- Stream Ask: same Ask URLs with `"stream": true` or `Accept: text/event-stream` (SSE). Apple Shortcuts **Get Contents of URL** waits for the full JSON; use `short_message` / `answer` (real line breaks) for Show Result.
-
-Note: Cursor SDK local agents run in the Node process. Prefer local `npm run dev` for the most reliable agent tooling demo; validate Vercel cold-starts separately.
-
----
-
-## Demo script
-
-1. Upload event → Save → ACT → appears on home  
-2. Upload event → Ask “similar events in Austin?” → `short_message` answer + saved  
-3. Upload restaurant → Describe “Potential birthday dinner” → Ask “restaurants for my birthday?”
+1. **Receive** images from the Share Sheet; if there is no input, **Ask For Photos**.
+2. **Choose from Menu**: Save · Ask · Describe & Save.
+3. **Get Contents of URL** — `POST https://<your-app>/api/shortcut/<save|ask|describe>`,
+   Request Body **Form**, with `image` set to the Shortcut Input.
+   Add `question` for Ask, `user_note` for Describe.
+4. **Show Result** → `short_message`, which is always plain text.

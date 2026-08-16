@@ -1,39 +1,43 @@
 import { getConfig } from "@/lib/config";
 
-const ALLOWED = new Set(["image/png", "image/jpeg", "image/jpg"]);
+const SIGNATURES: Array<{ mime: string; test: (b: Buffer) => boolean }> = [
+  { mime: "image/png", test: (b) => b.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) },
+  { mime: "image/jpeg", test: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
+  {
+    mime: "image/webp",
+    test: (b) => b.subarray(0, 4).toString() === "RIFF" && b.subarray(8, 12).toString() === "WEBP",
+  },
+  { mime: "image/heic", test: (b) => b.subarray(4, 8).toString() === "ftyp" },
+];
 
-export async function validateImageFile(file: File | null): Promise<{
+export interface ValidatedImage {
   bytes: Buffer;
-  contentType: "image/png" | "image/jpeg";
-}> {
+  mime: string;
+  size: number;
+}
+
+/**
+ * Trust the file's magic bytes over its declared Content-Type — iOS Shortcuts
+ * routinely mislabels HEIC and PNG.
+ */
+export async function validateImage(file: File): Promise<ValidatedImage> {
   const cfg = getConfig();
-  if (!file) throw new Error("Image file is required.");
+  const buffer = Buffer.from(await file.arrayBuffer());
 
-  const name = (file.name || "").toLowerCase();
-  let contentType = (file.type || "").toLowerCase();
-  if (contentType === "image/jpg") contentType = "image/jpeg";
-
-  const extOk = name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg");
-  if (contentType && !ALLOWED.has(contentType) && !extOk) {
-    throw new Error(`Unsupported image type '${contentType || name}'. Use PNG or JPEG.`);
+  if (!buffer.length) throw new Error("The uploaded image is empty.");
+  if (buffer.length > cfg.maxImageBytes) {
+    const mb = (cfg.maxImageBytes / (1024 * 1024)).toFixed(0);
+    throw new Error(`Image is too large (max ${mb}MB).`);
+  }
+  // Guards against the 70-byte placeholder uploads that polluted the old store.
+  if (buffer.length < 1024) {
+    throw new Error("The uploaded image is too small to be a real screenshot.");
   }
 
-  const ab = await file.arrayBuffer();
-  const bytes = Buffer.from(ab);
-  if (!bytes.length) throw new Error("Uploaded image is empty.");
-  if (bytes.length > cfg.maxImageBytes) {
-    throw new Error(`Image too large. Maximum size is ${(cfg.maxImageBytes / (1024 * 1024)).toFixed(0)} MB.`);
+  const detected = SIGNATURES.find((sig) => sig.test(buffer));
+  if (!detected) {
+    throw new Error("Unsupported image format. Use PNG, JPEG, WebP, or HEIC.");
   }
 
-  // Light magic-byte check
-  const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
-  const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8;
-  if (!isPng && !isJpeg) {
-    throw new Error("Could not read image. The file may be corrupted. Use a PNG or JPEG screenshot.");
-  }
-
-  return {
-    bytes,
-    contentType: isPng ? "image/png" : "image/jpeg",
-  };
+  return { bytes: buffer, mime: detected.mime, size: buffer.length };
 }

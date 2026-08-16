@@ -1,40 +1,81 @@
 import { NextResponse } from "next/server";
 import { getConfig } from "@/lib/config";
-import { getMemoryStore } from "@/lib/memory/memory-store";
+import { deleteMemory, getMemory, updateMemory, withImageUrls } from "@/lib/db/memories";
+import { deleteScreenshot } from "@/lib/db/storage";
+import { serializeMemory } from "@/lib/serialize";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-export async function GET(
-  _req: Request,
-  ctx: { params: Promise<{ id: string }> },
-) {
+type Params = { params: Promise<{ id: string }> };
+
+export async function GET(_req: Request, { params }: Params) {
   try {
-    const { id } = await ctx.params;
+    const { id } = await params;
     const cfg = getConfig();
-    const store = getMemoryStore();
-    const mem = await store.getMemory({ userId: cfg.demoUserId, memoryId: id });
-    if (!mem) return NextResponse.json({ detail: "Memory not found." }, { status: 404 });
-    return NextResponse.json({
-      memory_id: mem.memory_id,
-      title: mem.analysis?.title || mem.metadata.title || mem.memory_id,
-      description: mem.analysis?.description || mem.metadata.description || "",
-      content_type: mem.analysis?.content_type || mem.metadata.content_type || "other",
-      intent_mode: mem.analysis?.intent_mode || mem.metadata.intent_mode || "REMEMBER",
-      image_url: mem.image_url,
-      tags: mem.analysis?.tags || mem.metadata.tags || [],
-      analysis: mem.analysis,
-      metadata: mem.metadata,
-      question: mem.question,
-      user_description: mem.user_description,
-      completed: mem.completed,
-      demo_seed: Boolean(mem.metadata.demo_seed),
-      created_at: mem.created_at,
-      source: mem.source,
-      captured_at: mem.captured_at,
+    const memory = await getMemory(cfg.demoUserId, id);
+    if (!memory) return NextResponse.json({ error: "Memory not found" }, { status: 404 });
+    const [withUrl] = await withImageUrls([memory]);
+    return NextResponse.json(serializeMemory(withUrl), {
+      headers: { "Cache-Control": "no-store" },
     });
   } catch (err) {
     return NextResponse.json(
-      { detail: err instanceof Error ? err.message : "Get failed" },
+      { error: err instanceof Error ? err.message : "Lookup failed" },
+      { status: 502 },
+    );
+  }
+}
+
+export async function PATCH(req: Request, { params }: Params) {
+  try {
+    const { id } = await params;
+    const cfg = getConfig();
+    const body = await req.json().catch(() => ({}));
+
+    // Only user-editable fields; model-owned columns stay under the pipeline's control.
+    const patch: Record<string, unknown> = {};
+    if (typeof body.completed === "boolean") {
+      patch.completed_at = body.completed ? new Date().toISOString() : null;
+    }
+    if (typeof body.title === "string" && body.title.trim()) {
+      patch.title = body.title.trim().slice(0, 120);
+    }
+    if (typeof body.user_note === "string") patch.user_note = body.user_note.slice(0, 2000);
+    if (Array.isArray(body.tags)) {
+      patch.tags = body.tags.map((t: unknown) => String(t).toLowerCase().trim()).filter(Boolean).slice(0, 12);
+    }
+    if (typeof body.due_on === "string" || body.due_on === null) patch.due_on = body.due_on;
+
+    if (!Object.keys(patch).length) {
+      return NextResponse.json({ error: "No editable fields supplied" }, { status: 400 });
+    }
+
+    const updated = await updateMemory(cfg.demoUserId, id, patch);
+    if (!updated) return NextResponse.json({ error: "Memory not found" }, { status: 404 });
+    const [withUrl] = await withImageUrls([updated]);
+    return NextResponse.json(serializeMemory(withUrl));
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Update failed" },
+      { status: 502 },
+    );
+  }
+}
+
+export async function DELETE(_req: Request, { params }: Params) {
+  try {
+    const { id } = await params;
+    const cfg = getConfig();
+    const memory = await getMemory(cfg.demoUserId, id);
+    if (!memory) return NextResponse.json({ error: "Memory not found" }, { status: 404 });
+
+    const removed = await deleteMemory(cfg.demoUserId, memory.id);
+    if (memory.image_path) await deleteScreenshot(memory.image_path).catch(() => {});
+    return NextResponse.json({ deleted: removed, id: memory.id });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Delete failed" },
       { status: 502 },
     );
   }

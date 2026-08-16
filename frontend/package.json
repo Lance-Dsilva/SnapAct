@@ -9,11 +9,12 @@
     "lint": "eslint",
     "test-cursor": "tsx scripts/test-cursor.ts",
     "list-models": "tsx scripts/list-models.ts",
-    "test-api-mock": "USE_MOCK_CURSOR=true tsx scripts/test-api-mock.ts",
-    "cursor-login": "tsx scripts/cursor-login.ts"
+    "cursor-login": "tsx scripts/cursor-login.ts",
+    "verify": "tsx scripts/verify-pipeline.ts"
   },
   "dependencies": {
     "@cursor/sdk": "^1.0.28",
+    "@supabase/supabase-js": "^2.112.3",
     "next": "16.3.1",
     "react": "19.2.8",
     "react-dom": "19.2.8"

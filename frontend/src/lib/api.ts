@@ -1,12 +1,14 @@
 import type {
   AskResponse,
   CaptureResponse,
-  HomeFeedPlan,
-  MemoryDetail,
-  SearchResultItem,
+  Digest,
+  HealthResponse,
+  Memory,
+  MemoryList,
+  RetrievedMemory,
+  SearchResponse,
 } from "@/types";
 
-/** Same-origin Next.js API routes (no FastAPI required). */
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
 
 function url(path: string) {
@@ -15,14 +17,14 @@ function url(path: string) {
 
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    let detail = `Request failed (${res.status})`;
+    let message = `Request failed (${res.status})`;
     try {
       const body = await res.json();
-      detail = body.detail || detail;
+      message = body.error || body.detail || message;
     } catch {
-      /* ignore */
+      /* keep the status-based message */
     }
-    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+    throw new Error(message);
   }
   return res.json() as Promise<T>;
 }
@@ -32,151 +34,180 @@ export function getApiBase() {
 }
 
 export async function fetchHealth() {
-  const res = await fetch(url("/api/health"), { cache: "no-store" });
-  return handle<{
-    status: string;
-    cursor_configured: boolean;
-    memory_store_configured: boolean;
-    using_remote_memory: boolean;
-  }>(res);
+  return handle<HealthResponse>(await fetch(url("/api/health"), { cache: "no-store" }));
 }
 
-export async function listMemories(contentType?: string) {
-  const qs = contentType && contentType !== "all" ? `?content_type=${contentType}` : "";
-  const res = await fetch(url(`/api/memories${qs}`), { cache: "no-store" });
-  return handle<{ memories: MemoryDetail[]; source: string }>(res);
+export async function fetchDigest() {
+  return handle<Digest>(await fetch(url("/api/digest"), { cache: "no-store" }));
+}
+
+export async function listMemories(options?: {
+  contentType?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const params = new URLSearchParams();
+  if (options?.contentType && options.contentType !== "all") {
+    params.set("content_type", options.contentType);
+  }
+  if (options?.limit) params.set("limit", String(options.limit));
+  if (options?.offset) params.set("offset", String(options.offset));
+  const qs = params.toString();
+  return handle<MemoryList>(
+    await fetch(url(`/api/memories${qs ? `?${qs}` : ""}`), { cache: "no-store" }),
+  );
 }
 
 export async function getMemory(id: string) {
-  const res = await fetch(url(`/api/memories/${id}`), { cache: "no-store" });
-  return handle<MemoryDetail>(res);
+  return handle<Memory>(await fetch(url(`/api/memories/${id}`), { cache: "no-store" }));
 }
 
-export async function searchMemories(query: string, topK = 8) {
-  const res = await fetch(url("/api/search"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, top_k: topK, filters: {} }),
-  });
-  return handle<{ query: string; results: SearchResultItem[] }>(res);
+export async function updateMemory(id: string, patch: Record<string, unknown>) {
+  return handle<Memory>(
+    await fetch(url(`/api/memories/${id}`), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    }),
+  );
+}
+
+export async function deleteMemory(id: string) {
+  return handle<{ deleted: boolean; id: string }>(
+    await fetch(url(`/api/memories/${id}`), { method: "DELETE" }),
+  );
+}
+
+export async function setMemoryCompleted(id: string, completed: boolean) {
+  return handle<Memory>(
+    await fetch(url(`/api/memories/${id}/complete`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ completed }),
+    }),
+  );
+}
+
+export async function searchMemories(query: string, limit = 20) {
+  return handle<SearchResponse>(
+    await fetch(url(`/api/search?q=${encodeURIComponent(query)}&limit=${limit}`), {
+      cache: "no-store",
+    }),
+  );
 }
 
 export async function askSnapAct(question: string) {
-  const res = await fetch(url("/api/ask"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
-  });
-  return handle<AskResponse>(res);
+  return handle<AskResponse>(
+    await fetch(url("/api/ask"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question }),
+    }),
+  );
 }
 
-export async function streamAskSnapAct(
+export async function streamAsk(
   question: string,
   handlers: {
-    onMemories?: (memories: SearchResultItem[]) => void;
+    onStatus?: (text: string) => void;
+    onMemories?: (memories: RetrievedMemory[], considered: number, rejected: number) => void;
     onText?: (text: string) => void;
   },
 ): Promise<AskResponse> {
   const res = await fetch(url("/api/ask"), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "text/event-stream",
-    },
+    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
     body: JSON.stringify({ question, stream: true }),
   });
-  if (!res.ok || !res.body) {
-    return handle<AskResponse>(res);
-  }
+  if (!res.ok || !res.body) return handle<AskResponse>(res);
+
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  let finalAnswer: AskResponse = { answer: "", memories: [], citations: [] };
+  let final: AskResponse = { answer: "", memories: [] };
+
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
-    const parts = buffer.split("\n\n");
-    buffer = parts.pop() || "";
-    for (const part of parts) {
-      const line = part.split("\n").find((l) => l.startsWith("data: "));
+    const frames = buffer.split("\n\n");
+    buffer = frames.pop() || "";
+
+    for (const frame of frames) {
+      const line = frame.split("\n").find((l) => l.startsWith("data: "));
       if (!line) continue;
+      let event: Record<string, unknown>;
       try {
-        const event = JSON.parse(line.slice(6)) as {
-          type: string;
-          memories?: SearchResultItem[];
-          text?: string;
-          answer?: string;
-          short_message?: string;
-          citations?: AskResponse["citations"];
-          detail?: string;
-        };
-        if (event.type === "memories" && event.memories) {
-          handlers.onMemories?.(event.memories);
-          finalAnswer.memories = event.memories;
-        } else if (event.type === "delta" && event.text) {
-          handlers.onText?.(event.text);
-          finalAnswer.answer = event.text;
-        } else if (event.type === "done") {
-          finalAnswer = {
-            answer: event.answer || finalAnswer.answer,
-            memories: event.memories || finalAnswer.memories,
-            citations: event.citations || [],
-            short_message: event.short_message,
-          };
-        } else if (event.type === "error") {
-          throw new Error(event.detail || "Ask failed");
+        event = JSON.parse(line.slice(6));
+      } catch {
+        continue;
+      }
+
+      switch (event.type) {
+        case "status":
+          handlers.onStatus?.(String(event.text || ""));
+          break;
+        case "memories": {
+          const memories = (event.memories || []) as RetrievedMemory[];
+          final.memories = memories;
+          handlers.onMemories?.(
+            memories,
+            Number(event.considered || 0),
+            Number(event.rejected || 0),
+          );
+          break;
         }
-      } catch (err) {
-        if (err instanceof SyntaxError) continue;
-        throw err;
+        case "delta":
+          handlers.onText?.(String(event.text || ""));
+          final.answer = String(event.text || "");
+          break;
+        case "done":
+          final = {
+            answer: String(event.answer || final.answer),
+            short_message: event.short_message ? String(event.short_message) : undefined,
+            memories: (event.memories as RetrievedMemory[]) || final.memories,
+          };
+          break;
+        case "error":
+          throw new Error(String(event.error || "Ask failed"));
       }
     }
   }
-  return finalAnswer;
-}
-
-export async function refreshIntelligence() {
-  const res = await fetch(url("/api/intelligence/refresh"), { method: "POST" });
-  return handle<HomeFeedPlan>(res);
+  return final;
 }
 
 export async function captureScreenshot(params: {
   file: File;
   mode: "save" | "ask" | "describe";
   question?: string;
-  userDescription?: string;
+  note?: string;
   onPhase?: (phase: string) => void;
 }) {
-  const { file, mode, question, userDescription, onPhase } = params;
-  onPhase?.("Understanding screenshot...");
+  const { file, mode, question, note, onPhase } = params;
+
   const form = new FormData();
   form.append("image", file);
   form.append("mode", mode);
   form.append("source", "web");
   form.append("captured_at", new Date().toISOString());
   form.append("client_request_id", crypto.randomUUID());
-  if (mode === "ask" && question) form.append("question", question);
-  if (userDescription && mode !== "ask") {
-    form.append("user_description", userDescription);
-  }
+  if (question) form.append("question", question);
+  if (note) form.append("user_note", note);
 
-  const timers: number[] = [];
-  timers.push(
-    window.setTimeout(() => onPhase?.("Checking whether current information is needed..."), 900),
+  // Analysis is synchronous, so the phases reflect what the server is actually doing.
+  const phases: Array<[number, string]> = [
+    [0, "Uploading screenshot"],
+    [900, "Reading the screenshot"],
+    [3500, "Working out what it is"],
+    [7000, "Filing it away"],
+  ];
+  const timers = phases.map(([delay, label]) =>
+    window.setTimeout(() => onPhase?.(label), delay),
   );
-  timers.push(window.setTimeout(() => onPhase?.("Organizing memory..."), 2200));
-  timers.push(window.setTimeout(() => onPhase?.("Saving to SnapAct..."), 3500));
 
   try {
     const res = await fetch(url("/api/capture"), { method: "POST", body: form });
     const data = await handle<CaptureResponse>(res);
-    const activity = Array.isArray(data.agent_activity)
-      ? data.agent_activity
-      : data.agent_activity?.steps || [];
-    if (activity.some((s) => /research|search|web/i.test(s))) {
-      onPhase?.("Searching current sources...");
-    }
     onPhase?.("Done");
     return data;
   } finally {
@@ -184,11 +215,19 @@ export async function captureScreenshot(params: {
   }
 }
 
-export async function completeMemory(id: string) {
-  const res = await fetch(url(`/api/memories/${id}/complete`), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ completed: true }),
-  });
-  return handle<MemoryDetail>(res);
+export async function fetchStalledCount() {
+  const data = await handle<{ stalled: number }>(
+    await fetch(url("/api/memories/repair"), { cache: "no-store" }),
+  );
+  return data.stalled;
+}
+
+export async function repairStalled(limit = 5) {
+  return handle<{ repaired: number; failed: number; remaining: number }>(
+    await fetch(url("/api/memories/repair"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ limit }),
+    }),
+  );
 }

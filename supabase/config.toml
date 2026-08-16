@@ -1,0 +1,4 @@
+project_id = "omtyrmscccjibacullie"
+
+[functions.embed]
+verify_jwt = true

@@ -1,32 +1,28 @@
 import { NextResponse } from "next/server";
 import { getConfig } from "@/lib/config";
-import { getMemoryStore } from "@/lib/memory/memory-store";
+import { getMemory, updateMemory } from "@/lib/db/memories";
+import { serializeMemory } from "@/lib/serialize";
 
 export const runtime = "nodejs";
 
-export async function POST(
-  req: Request,
-  ctx: { params: Promise<{ id: string }> },
-) {
+/** Mark an actionable memory done (or undo it). */
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = await ctx.params;
-    const body = await req.json().catch(() => ({ completed: true }));
+    const { id } = await params;
     const cfg = getConfig();
-    const store = getMemoryStore();
-    const mem = await store.updateMemory({
-      userId: cfg.demoUserId,
-      memoryId: id,
-      patch: { completed: body.completed !== false },
+    const body = await req.json().catch(() => ({}));
+    const completed = body.completed !== false;
+
+    const existing = await getMemory(cfg.demoUserId, id);
+    if (!existing) return NextResponse.json({ error: "Memory not found" }, { status: 404 });
+
+    const updated = await updateMemory(cfg.demoUserId, existing.id, {
+      completed_at: completed ? new Date().toISOString() : null,
     });
-    if (!mem) return NextResponse.json({ detail: "Memory not found." }, { status: 404 });
-    return NextResponse.json({
-      memory_id: mem.memory_id,
-      completed: mem.completed,
-      title: mem.analysis?.title || mem.metadata.title,
-    });
+    return NextResponse.json(serializeMemory(updated!));
   } catch (err) {
     return NextResponse.json(
-      { detail: err instanceof Error ? err.message : "Update failed" },
+      { error: err instanceof Error ? err.message : "Update failed" },
       { status: 502 },
     );
   }

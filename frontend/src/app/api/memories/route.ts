@@ -1,64 +1,80 @@
 import { NextResponse } from "next/server";
 import { getConfig } from "@/lib/config";
-import { cardSummary } from "@/lib/card-summary";
-import { getMemoryStore } from "@/lib/memory/memory-store";
-import type { MemoryRecord } from "@/lib/schemas/memory";
+import { countMemories, listMemories, typeCounts, withImageUrls } from "@/lib/db/memories";
+import { serializeMemory } from "@/lib/serialize";
+import {
+  isContentType,
+  type ContentType,
+  type IntentMode,
+  type MemoryStatus,
+} from "@/lib/schemas/memory";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const dynamic = "force-dynamic";
 
-function serialize(mem: MemoryRecord) {
-  return {
-    memory_id: mem.memory_id,
-    user_id: mem.user_id,
-    image_url: mem.image_url,
-    created_at: mem.created_at,
-    updated_at: mem.updated_at,
-    searchable_text: mem.searchable_text,
-    metadata: mem.metadata,
-    analysis: mem.analysis,
-    source: mem.source,
-    captured_at: mem.captured_at,
-    question: mem.question,
-    user_description: mem.user_description,
-    completed: mem.completed,
-    demo_seed: Boolean(mem.metadata.demo_seed),
-    title: mem.analysis?.title || mem.metadata.title || mem.memory_id,
-    content_type: mem.analysis?.content_type || mem.metadata.content_type || "other",
-    intent_mode: mem.analysis?.intent_mode || mem.metadata.intent_mode || "REMEMBER",
-    description: cardSummary({
-      title: String(mem.analysis?.title || mem.metadata.title || ""),
-      description: String(mem.analysis?.description || mem.metadata.description || ""),
-      user_description: mem.user_description,
-      analysis: mem.analysis,
-      metadata: mem.metadata,
-    }),
-    tags: mem.analysis?.tags || mem.metadata.tags || [],
-  };
-}
-
+/**
+ * A real listing: ORDER BY created_at with filters and pagination, replacing the
+ * old approach of firing five fixed semantic probes and merging whatever returned.
+ */
 export async function GET(req: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const limit = Number(searchParams.get("limit") || 40);
-    const contentType = searchParams.get("content_type");
     const cfg = getConfig();
-    const store = getMemoryStore();
-    const memories = await store.listRecent({
-      userId: cfg.demoUserId,
-      limit,
-      filters: contentType ? { content_type: contentType } : {},
-    });
+    const { searchParams } = new URL(req.url);
+
+    const contentTypes = (searchParams.getAll("content_type").flatMap((v) => v.split(",")))
+      .map((v) => v.trim())
+      .filter((v) => v && v !== "all")
+      .filter(isContentType) as ContentType[];
+
+    const intentModes = searchParams
+      .getAll("intent_mode")
+      .flatMap((v) => v.split(","))
+      .map((v) => v.trim().toUpperCase())
+      .filter((v) => ["REMEMBER", "EXPLORE", "ACT"].includes(v)) as IntentMode[];
+
+    const statusParam = searchParams
+      .getAll("status")
+      .flatMap((v) => v.split(","))
+      .map((v) => v.trim())
+      .filter((v) => ["pending", "ready", "failed"].includes(v)) as MemoryStatus[];
+
+    const limit = Number(searchParams.get("limit") || 50);
+    const offset = Number(searchParams.get("offset") || 0);
+
+    const [memories, total, counts] = await Promise.all([
+      listMemories({
+        userId: cfg.demoUserId,
+        limit,
+        offset,
+        contentTypes: contentTypes.length ? contentTypes : undefined,
+        intentModes: intentModes.length ? intentModes : undefined,
+        status: statusParam.length ? statusParam : undefined,
+        actionable: searchParams.get("actionable") === "true" ? true : undefined,
+        includeCompleted: searchParams.get("include_completed") !== "false",
+        hasImage: searchParams.get("has_image") === "true",
+        orderBy: (searchParams.get("order_by") as "created_at" | "due_on" | "event_on") || undefined,
+      }),
+      countMemories(cfg.demoUserId),
+      typeCounts(cfg.demoUserId),
+    ]);
+
+    const withUrls = await withImageUrls(memories);
+
     return NextResponse.json(
       {
-        memories: memories.map(serialize),
-        source: store.usingRemote ? "api" : "mock",
+        memories: withUrls.map(serializeMemory),
+        total,
+        counts,
+        limit,
+        offset,
+        has_more: offset + withUrls.length < total,
       },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (err) {
+    console.error("[api/memories] failed", err);
     return NextResponse.json(
-      { detail: err instanceof Error ? err.message : "List failed" },
+      { error: err instanceof Error ? err.message : "Could not list memories" },
       { status: 502 },
     );
   }
