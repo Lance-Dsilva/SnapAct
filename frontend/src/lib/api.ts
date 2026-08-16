@@ -157,7 +157,7 @@ export async function captureScreenshot(params: {
   form.append("captured_at", new Date().toISOString());
   form.append("client_request_id", crypto.randomUUID());
   if (mode === "ask" && question) form.append("question", question);
-  if (mode === "describe" && userDescription) {
+  if (userDescription && mode !== "ask") {
     form.append("user_description", userDescription);
   }
 

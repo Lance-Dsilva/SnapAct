@@ -70,10 +70,21 @@ export function buildScreenshotUserPrompt(input: {
     parts.push(
       "",
       `User description / context (HIGH VALUE): ${input.userDescription}`,
-      "Incorporate this context into intent_summary, description, tags, and searchable_text.",
+      "Reframe that note into a clear stored description (do not copy slang verbatim).",
+      "Incorporate it into intent_summary, description, tags, and searchable_text.",
+      "If they mention today / tomorrow / next week, resolve it using Captured at.",
+      "Set temporal.due_at to YYYY-MM-DD, intent_mode ACT, actionable true.",
+      "Add a suggested_action type research (or remind) with the same due_at.",
+      "Put the due date in searchable_text so it can be retrieved as a to-do.",
     );
   } else {
     parts.push("Save and organize this screenshot with structured metadata.");
+    if (input.userDescription) {
+      parts.push(
+        `Optional user note: ${input.userDescription}`,
+        "If the note mentions today / tomorrow / next week, set temporal.due_at (YYYY-MM-DD from Captured at) and a research/remind suggested_action.",
+      );
+    }
   }
 
   parts.push(

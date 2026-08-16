@@ -309,6 +309,8 @@ export class MemoryStore {
             title: analysis?.title,
             tags: analysis?.tags,
             event: analysis?.event,
+            temporal: analysis?.temporal || input.metadata.temporal,
+            suggested_actions: analysis?.suggested_actions,
             source: input.metadata.source,
           },
         });
@@ -470,10 +472,12 @@ export class MemoryStore {
       ({
         title,
         content_type: contentType as MemoryAnalysis["content_type"],
-        intent_mode: "REMEMBER",
+        intent_mode: (item.metadata.intent_mode as MemoryAnalysis["intent_mode"]) || "REMEMBER",
         intent_summary: item.description || "Saved screenshot",
         description: item.description,
-        searchable_text: [item.description, item.ocr_text].filter(Boolean).join("\n"),
+        searchable_text: [item.description, item.ocr_text, item.metadata.searchable_text]
+          .filter(Boolean)
+          .join("\n"),
         tags: [item.category, item.metadata.platform, item.metadata.movie].filter(
           (value): value is string => typeof value === "string" && Boolean(value),
         ),
@@ -483,10 +487,14 @@ export class MemoryStore {
         urgency: "none",
         needs_live_search: false,
         confidence: item.score || 0.7,
-        suggested_actions: [],
+        suggested_actions: (item.metadata.suggested_actions as MemoryAnalysis["suggested_actions"]) || [],
+        temporal: (item.metadata.temporal as Record<string, unknown>) || null,
         citations: [],
         agent_activity: ["Loaded from SnapAct memory"],
       } as MemoryAnalysis);
+    if (!analysis.temporal && item.metadata.temporal) {
+      analysis.temporal = item.metadata.temporal as Record<string, unknown>;
+    }
     const metadata = {
       ...item.metadata,
       title,

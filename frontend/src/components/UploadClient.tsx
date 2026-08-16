@@ -124,12 +124,16 @@ export default function UploadClient() {
           />
         ) : null}
 
-        {mode === "describe" ? (
+        {mode === "describe" || mode === "save" ? (
           <textarea
             value={userDescription}
             onChange={(e) => setUserDescription(e.target.value)}
             rows={3}
-            placeholder="Potential restaurant for birthday dinner"
+            placeholder={
+              mode === "describe"
+                ? "Remember this — I want to research it tomorrow"
+                : "Optional note, e.g. research this tomorrow"
+            }
             className="w-full rounded-2xl border border-[#e5e7eb] bg-white px-4 py-3 outline-none focus:border-[var(--accent)]"
           />
         ) : null}

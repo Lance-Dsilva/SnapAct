@@ -16,6 +16,7 @@ import {
   IconSparkle,
 } from "@/components/Icons";
 import { fetchHealth, listMemories } from "@/lib/api";
+import { addDaysYmd, dueAtFromMemory } from "@/lib/due-date";
 import type { AttentionItem, HomeFeedPlan, MemoryDetail } from "@/types";
 
 const FILTERS = [
@@ -81,10 +82,25 @@ export default function HomeClient() {
           m.title !== "Saved screenshot"
         );
       });
+      const tomorrow = addDaysYmd(null, 1);
+      const today = addDaysYmd(null, 0);
+      const todos = live
+        .filter((m) => {
+          const due = dueAtFromMemory(m);
+          return due === tomorrow || due === today;
+        })
+        .map((m) => {
+          const due = dueAtFromMemory(m);
+          return {
+            ...toItem(m),
+            reason: due === today ? `Due today (${due})` : `Due tomorrow (${due})`,
+            priority: due === today ? 2 : 1,
+          };
+        });
       setMemories(live);
       setFeed({
         generated_at: new Date().toISOString(),
-        needs_attention: [],
+        needs_attention: todos,
         upcoming_events: live.filter((m) => matchesType(m, "event")).map(toItem),
         follow_ups: live.filter((m) => matchesType(m, "person_followup")).map(toItem),
         suggested_explorations: [],
@@ -113,6 +129,7 @@ export default function HomeClient() {
     (item) => Boolean(item.image_url),
   );
   const visibleRecent = showAllScreenshots ? recent : recent.slice(0, 3);
+  const todos = feed?.needs_attention || [];
 
   const filtered = useMemo(() => {
     if (!category) return memories;
@@ -187,6 +204,39 @@ export default function HomeClient() {
         </section>
       ) : (
         <>
+          {todos.length ? (
+            <section className="mt-6">
+              <SectionHead title="For tomorrow" href="/ask?q=things%20to%20do%20tomorrow" />
+              <div className="mt-3 space-y-3">
+                {todos.map((item) => {
+                  const mem = memories.find((m) => m.memory_id === item.memory_id);
+                  return (
+                    <Link
+                      key={item.memory_id}
+                      href={`/memory/${item.memory_id}`}
+                      className="flex gap-3 rounded-2xl bg-[#eff6ff] p-3"
+                    >
+                      {item.image_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={item.image_url} alt="" className="h-16 w-16 rounded-xl object-cover" />
+                      ) : (
+                        <div className="h-16 w-16 rounded-xl bg-[#dbeafe]" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-semibold">{item.title}</div>
+                        <p className="mt-0.5 line-clamp-2 text-sm text-[#6b7280]">
+                          {item.reason}
+                        </p>
+                        <p className="mt-1 text-[12px] text-[var(--accent)]">
+                          {mem?.description || "Follow up"}
+                        </p>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
           <section className="mt-6">
             <SectionHead title="Screenshots" />
             <div className="mt-3 space-y-3">

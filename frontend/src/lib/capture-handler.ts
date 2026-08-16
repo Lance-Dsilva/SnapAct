@@ -33,10 +33,10 @@ export async function handleCapture(req: Request, forcedMode?: CaptureMode) {
       mode === "ask"
         ? formText(form, "question", "q", "ask", "text")
         : formText(form, "question", "q");
-    const userDescription =
+        const userDescription =
       mode === "describe"
         ? formText(form, "user_description", "userDescription", "description", "note", "text")
-        : formText(form, "user_description", "userDescription", "description", "note");
+        : formText(form, "user_description", "userDescription", "description", "note", "text");
     const source = formText(form, "source") || "iphone";
     const capturedAt = formText(form, "captured_at");
     const clientRequestId = formText(form, "client_request_id");
@@ -114,6 +114,9 @@ export async function handleCapture(req: Request, forcedMode?: CaptureMode) {
               event: analysis.event,
               person_followup: analysis.person_followup,
               place: analysis.place,
+              temporal: analysis.temporal,
+              suggested_actions: analysis.suggested_actions,
+              user_description: userDescription,
               captured_at: capturedAt,
               source,
               analysis,

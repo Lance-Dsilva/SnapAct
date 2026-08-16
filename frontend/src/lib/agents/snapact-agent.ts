@@ -10,6 +10,7 @@ import { Agent, Cursor, CursorAgentError, JsonlLocalAgentStore } from "@cursor/s
 import type { SDKCustomTool, SDKJsonValue } from "@cursor/sdk";
 import { getConfig, cursorConfigured } from "@/lib/config";
 import { detectAskIntents } from "@/lib/ask-intents";
+import { applyUserNoteTiming } from "@/lib/due-date";
 import { getMemoryStore } from "@/lib/memory/memory-store";
 import {
   FEED_REFRESH_SYSTEM,
@@ -150,6 +151,7 @@ function normalizeAnalysis(
     question?: string | null;
     userDescription?: string | null;
     source?: string | null;
+    capturedAt?: string | null;
     toolsUsed: string[];
     webSearchUsed: boolean;
   },
@@ -205,6 +207,7 @@ function normalizeAnalysis(
   if (extras.question && !analysis.searchable_text.includes(extras.question)) {
     analysis.searchable_text = `${analysis.searchable_text} User question: ${extras.question}.`;
   }
+  applyUserNoteTiming(analysis, extras.userDescription, extras.capturedAt);
 
   if (!analysis.short_message) {
     if (extras.mode === "ask" && analysis.answer) {
@@ -231,6 +234,7 @@ function mockAnalyzeScreenshot(input: {
   question?: string | null;
   userDescription?: string | null;
   source?: string | null;
+  capturedAt?: string | null;
 }): { analysis: MemoryAnalysis; meta: AgentRunMeta } {
   const q = `${input.question || ""} ${input.userDescription || ""}`.toLowerCase();
   const wantsEvent = /event|austin|hackathon|similar/.test(q);
@@ -349,6 +353,8 @@ function mockAnalyzeScreenshot(input: {
       web_search_used: false,
     };
   }
+
+  applyUserNoteTiming(analysis, input.userDescription, input.capturedAt);
 
   return {
     analysis,
@@ -582,6 +588,7 @@ export async function analyzeScreenshot(input: {
       question: input.question,
       userDescription: input.userDescription,
       source: input.source,
+      capturedAt: input.capturedAt,
       toolsUsed: meta.toolsUsed,
       webSearchUsed: meta.webSearchUsed,
     });

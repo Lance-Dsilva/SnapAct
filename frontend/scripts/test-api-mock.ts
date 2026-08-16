@@ -61,6 +61,19 @@ async function main() {
     "describe includes user description in searchable_text",
   );
 
+  const later = await analyzeScreenshot({
+    imageBytes: png(),
+    mimeType: "image/png",
+    mode: "describe",
+    userDescription: "remember this screenshot as I want to research about this tomorrow",
+    capturedAt: "2026-08-15T22:00:00-05:00",
+  });
+  assert(later.analysis.temporal?.due_at === "2026-08-16", "tomorrow → due_at next local day");
+  assert(
+    later.analysis.searchable_text.includes("2026-08-16"),
+    "due date is indexed in searchable_text",
+  );
+
   const saved = await store.saveMemory({
     userId: "demo-user",
     imageBytes: png(),
