@@ -135,7 +135,7 @@ export async function handleCapture(req: Request, forcedMode?: CaptureMode) {
         suggested_actions: [],
         citations: [],
         image_url: imageUrl,
-        agent_activity: ["Screenshot received", "Saved immediately", "Grok analyzing in background"],
+        agent_activity: ["Screenshot received", "Saved immediately", "Analyzing in background"],
         duplicate: false,
         degraded: false,
         warning: null,
@@ -181,7 +181,7 @@ export async function handleCapture(req: Request, forcedMode?: CaptureMode) {
         warning =
           err instanceof Error
             ? err.message
-            : "Grok analysis unavailable; saved with limited metadata.";
+            : "Screenshot analysis unavailable; saved with limited metadata.";
       } else if (err instanceof SnapActAgentError) {
         return jsonError(err.message, 502);
       } else {

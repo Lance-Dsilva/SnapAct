@@ -68,7 +68,7 @@ export async function POST(req: Request) {
         answer,
         short_message: answer,
         citations: [],
-        agent_activity: ["Retrieved memories", "Grok unavailable; listed search results"],
+        agent_activity: ["Retrieved memories", "Model unavailable; listed search results"],
       };
     }
 

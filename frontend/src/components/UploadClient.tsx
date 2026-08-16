@@ -154,7 +154,7 @@ export default function UploadClient() {
           {busy
             ? "Processing…"
             : mode === "ask"
-              ? "Ask Grok"
+              ? "Ask SnapAct"
               : mode === "describe"
                 ? "Describe & Save"
                 : "Save to SnapAct"}

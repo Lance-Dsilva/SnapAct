@@ -2,14 +2,14 @@
 
 **Screenshots are unfinished intentions.**
 
-SnapAct turns screenshots into memory, answers, and actions using **Grok 4.6 via the Cursor SDK** (hackathon API credits).
+SnapAct turns screenshots into memory, answers, and actions using **GPT-5.6 Luna via the Cursor SDK**.
 
 ```text
 Apple Shortcut / Web App
         ↓
 Next.js API Routes (/api/*)
         ↓
-Cursor SDK → Grok 4.6
+Cursor SDK → GPT-5.6 Luna (screenshots) / Composer 2.5 (Ask)
         ↓
 Tools (webSearch, webFetch, custom memory tools)
         ↓
@@ -39,7 +39,7 @@ App: http://localhost:3000
 ```bash
 cd frontend
 npm run list-models          # requires CURSOR_API_KEY
-# copy the exact Grok 4.6 id into CURSOR_MODEL
+# copy the vision model id into CURSOR_MODEL (default gpt-5.6-luna)
 npm run test-cursor          # expects: SNAPACT GROK WORKING
 npm run test-api-mock        # offline flow tests (mock agent)
 ```
@@ -51,7 +51,7 @@ npm run test-api-mock        # offline flow tests (mock agent)
 | Variable | Where | Purpose |
 |---|---|---|
 | `CURSOR_API_KEY` | server | Cursor API key (credits) |
-| `CURSOR_MODEL` | server | Exact Grok 4.6 model id from account |
+| `CURSOR_MODEL` | server | Screenshot analysis model (default `gpt-5.6-luna`) |
 | `CURSOR_SEARCH_MODEL` | server | Fast/cheap model for Ask synthesis (default `composer-2.5`) |
 | `USE_MOCK_CURSOR` | server | Offline mock without Cursor calls |
 | `DEMO_USER_ID` | server | default `demo-user` |
@@ -98,7 +98,7 @@ All modes **save** a memory. Responses include `short_message` for Apple Shortcu
 
 ---
 
-## Cursor tools available to Grok
+## Cursor tools available to the agent
 
 Built-in (Cursor SDK `ToolName`):
 

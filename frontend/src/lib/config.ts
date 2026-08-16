@@ -3,7 +3,7 @@
 export function getConfig() {
   return {
     cursorApiKey: process.env.CURSOR_API_KEY?.trim() || "",
-    cursorModel: process.env.CURSOR_MODEL?.trim() || "",
+    cursorModel: process.env.CURSOR_MODEL?.trim() || "gpt-5.6-luna",
     cursorSearchModel: process.env.CURSOR_SEARCH_MODEL?.trim() || "composer-2.5",
     useMockCursor: (process.env.USE_MOCK_CURSOR || "").toLowerCase() === "true",
     demoUserId: process.env.DEMO_USER_ID?.trim() || "demo-user",

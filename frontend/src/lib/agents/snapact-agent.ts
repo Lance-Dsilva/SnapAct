@@ -1,6 +1,6 @@
 /**
  * Central SnapAct ↔ Cursor SDK interface.
- * All Grok 4.6 inference goes through Cursor (no direct api.x.ai calls).
+ * Screenshot analysis uses GPT-5.6 Luna via Cursor SDK (no direct provider APIs).
  */
 
 import { mkdirSync } from "node:fs";
@@ -61,7 +61,7 @@ function requireCursorConfig() {
   if (cfg.useMockCursor) return cfg;
   if (!cfg.cursorModel) {
     throw new SnapActAgentError(
-      "CURSOR_MODEL is not configured. Run `npm run list-models` or set the Grok 4.6 model id from the hackathon account.",
+      "CURSOR_MODEL is not configured. Run `npm run list-models` or set gpt-5.6-luna.",
       "missing_model",
     );
   }

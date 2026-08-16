@@ -37,7 +37,7 @@ async function main() {
         console.log(`    variant: ${v.displayName}${v.isDefault ? " (default)" : ""}`);
       }
     }
-    console.log("\nSet CURSOR_MODEL in frontend/.env.local to the exact Grok 4.6 id.");
+    console.log("\nSet CURSOR_MODEL in frontend/.env.local (default gpt-5.6-luna).");
   } catch (err) {
     if (err instanceof CursorAgentError) {
       console.error("Failed to list models:", err.message);

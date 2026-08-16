@@ -56,7 +56,7 @@ export default function ResultClient({ memoryId }: { memoryId: string }) {
           </div>
 
           <div>
-            <p className="text-sm font-medium text-teal-700">Grok analyzed this</p>
+            <p className="text-sm font-medium text-teal-700">Analyzed this</p>
             <h1 className="mt-1 font-[family-name:var(--font-display)] text-3xl text-[var(--ink)]">
               {analysis?.title || memory?.title || "Memory"}
             </h1>
