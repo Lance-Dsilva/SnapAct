@@ -378,17 +378,9 @@ export class MemoryStore {
       try {
         const topK = Math.min(Math.max(input.limit ?? 8, 1), 8);
         const filterType = String(input.filters?.content_type || "").trim();
-        const queries = filterType
-          ? [filterType, "screenshot"]
-          : ["screenshot", "event", "place", "movie", "restaurant", "quote"];
-        const batches = await Promise.all(
-          queries.map((query) =>
-            ragSearch({ query, topK }).catch(() => [] as RagSearchHit[]),
-          ),
-        );
-        const merged = new Map<string, RagSearchHit>();
-        for (const hit of batches.flat()) merged.set(hit.memory_id, hit);
-        let records = [...merged.values()]
+        const query = filterType || "screenshot";
+        const hits = await ragSearch({ query, topK });
+        let records = hits
           .map((hit) => this.hitToRecord(hit, input.userId))
           .filter((mem) => Boolean(mem.image_url) && !isUnfinishedMemory(mem));
         records.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));

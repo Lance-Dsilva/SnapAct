@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { SourcesList } from "@/components/Cards";
 import { Header } from "@/components/Header";
-import { askSnapAct, searchMemories } from "@/lib/api";
+import { askSnapAct } from "@/lib/api";
 import type { AskResponse, SearchResultItem } from "@/types";
 
 function AskInner() {
@@ -22,21 +22,9 @@ function AskInner() {
     setLoading(true);
     setError(null);
     try {
-      const search = await searchMemories(q.trim());
-      setSearchHits(search.results);
-      try {
-        const ask = await askSnapAct(q.trim());
-        setAnswer(ask);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Ask failed");
-        if (search.results.length) {
-          setAnswer({
-            answer: `Related screenshots for “${q.trim()}”:`,
-            memories: search.results,
-            citations: [],
-          });
-        }
-      }
+      const ask = await askSnapAct(q.trim());
+      setAnswer(ask);
+      setSearchHits(ask.memories || []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ask failed");
     } finally {

@@ -52,6 +52,7 @@ npm run test-api-mock        # offline flow tests (mock agent)
 |---|---|---|
 | `CURSOR_API_KEY` | server | Cursor API key (credits) |
 | `CURSOR_MODEL` | server | Exact Grok 4.6 model id from account |
+| `CURSOR_SEARCH_MODEL` | server | Fast/cheap model for Ask synthesis (default `composer-2.5`) |
 | `USE_MOCK_CURSOR` | server | Offline mock without Cursor calls |
 | `DEMO_USER_ID` | server | default `demo-user` |
 | `MEMORY_*_ENDPOINT` | server | Teammate Supabase HTTP gateway |

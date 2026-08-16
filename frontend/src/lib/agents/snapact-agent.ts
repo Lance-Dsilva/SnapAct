@@ -323,6 +323,8 @@ async function runCursorPrompt(input: {
   imageBase64?: string;
   mimeType?: string;
   enableMemoryTools?: boolean;
+  model?: string;
+  tools?: string[];
   label: string;
 }): Promise<{ text: string; meta: AgentRunMeta }> {
   const cfg = requireCursorConfig();
@@ -394,14 +396,15 @@ async function runCursorPrompt(input: {
       }
     : undefined;
 
+  const modelId = input.model || cfg.cursorModel;
   console.info(
-    `[snapact-agent] start label=${input.label} model=${cfg.cursorModel} image=${Boolean(input.imageBase64)}`,
+    `[snapact-agent] start label=${input.label} model=${modelId} image=${Boolean(input.imageBase64)}`,
   );
 
   try {
     await using agent = await Agent.create({
       ...(cfg.cursorApiKey ? { apiKey: cfg.cursorApiKey } : {}),
-      model: { id: cfg.cursorModel },
+      model: { id: modelId },
       local: {
         cwd: writableSdkRoot(),
         store: new JsonlLocalAgentStore(join(writableSdkRoot(), "agent-store")),
@@ -410,7 +413,7 @@ async function runCursorPrompt(input: {
       },
       // Built-in webSearch / webFetch are available through Cursor for live info.
       // Restrict filesystem mutation tools for API safety.
-      tools: ["webSearch", "webFetch", "mcp", "read"],
+      tools: input.tools ?? ["webSearch", "webFetch", "mcp", "read"],
       disallowedTools: ["shell", "edit", "delete", "generateImage"],
     });
 
@@ -457,7 +460,7 @@ async function runCursorPrompt(input: {
     return {
       text,
       meta: {
-        model: cfg.cursorModel,
+        model: modelId,
         durationMs,
         toolsUsed: [...toolsUsed],
         webSearchUsed,
@@ -597,7 +600,9 @@ export async function analyzeSavedMemories(input: {
   const { text, meta } = await runCursorPrompt({
     system: MEMORY_ASK_SYSTEM,
     userText: buildMemoryAskPrompt(input.question, JSON.stringify(input.memories).slice(0, 24000)),
-    enableMemoryTools: true,
+    enableMemoryTools: false,
+    model: cfg.cursorSearchModel,
+    tools: [],
     label: "ask-across-memories",
   });
   const data = extractJsonObject(text);
