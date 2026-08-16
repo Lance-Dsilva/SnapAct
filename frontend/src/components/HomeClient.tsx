@@ -259,7 +259,7 @@ export default function HomeClient() {
             </section>
           ) : null}
           <section className="mt-6">
-            <SectionHead title="Screenshots" />
+            <SectionHead title="Recent Screenshots" />
             <div className="mt-3 space-y-3">
               {visibleRecent.map((item) => {
                 const mem = memories.find((m) => m.memory_id === item.memory_id);
@@ -307,7 +307,7 @@ export default function HomeClient() {
               ) : null}
               {!recent.length ? (
                 <p className="text-sm text-[#9ca3af]">
-                  No screenshots in memory yet. Capture one and it will show up here from search.
+                  No recent screenshots yet. Capture one and it will show up here.
                 </p>
               ) : null}
             </div>

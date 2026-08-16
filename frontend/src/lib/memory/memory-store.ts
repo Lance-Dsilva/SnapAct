@@ -321,7 +321,10 @@ export class MemoryStore {
           externalId,
           imagePath,
           contentType: input.contentType,
-          description: (analysis?.description || analysis?.title || input.searchableText).slice(0, 400),
+          description: [`Saved on ${nowIso().slice(0, 10)}`, analysis?.title, analysis?.description]
+            .filter((part) => typeof part === "string" && part.trim())
+            .join(". ")
+            .slice(0, 400),
           ocrText: [analysis?.extracted_text_summary, input.searchableText, `Uploaded at ${nowIso()}`]
             .filter(Boolean)
             .join("\n"),
@@ -415,10 +418,14 @@ export class MemoryStore {
     if (cfg.memorySearchEndpoint && !cfg.memoryListEndpoint) {
       try {
         const filterType = String(input.filters?.content_type || "").trim();
-        const probes = filterType ? [filterType] : ["event", "knowledge", "screenshot"];
+        const today = nowIso().slice(0, 10);
+        const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+        const probes = filterType
+          ? [filterType]
+          : [today, yesterday, "saved screenshot", "knowledge", "event"];
         const byId = new Map<string, MemoryRecord>();
         for (const query of probes) {
-          const hits = await ragSearch({ query, topK: 8, signImages: false }).catch((error) => {
+          const hits = await ragSearch({ query, topK: 12, signImages: false }).catch((error) => {
             console.warn(`RAG list probe failed query=${query}`, error);
             return [] as RagSearchHit[];
           });
