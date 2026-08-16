@@ -418,14 +418,10 @@ export class MemoryStore {
     if (cfg.memorySearchEndpoint && !cfg.memoryListEndpoint) {
       try {
         const filterType = String(input.filters?.content_type || "").trim();
-        const today = nowIso().slice(0, 10);
-        const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-        const probes = filterType
-          ? [filterType]
-          : [today, yesterday, "saved screenshot", "knowledge", "event"];
+        const probes = filterType ? [filterType] : ["event", "knowledge"];
         const byId = new Map<string, MemoryRecord>();
         for (const query of probes) {
-          const hits = await ragSearch({ query, topK: 12, signImages: false }).catch((error) => {
+          const hits = await ragSearch({ query, topK: 8, signImages: false }).catch((error) => {
             console.warn(`RAG list probe failed query=${query}`, error);
             return [] as RagSearchHit[];
           });
