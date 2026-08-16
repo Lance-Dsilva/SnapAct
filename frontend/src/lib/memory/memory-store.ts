@@ -26,6 +26,9 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+/** Shared phrase so Home can retrieve any SnapAct save, not only event-like text. */
+export const SNAPACT_INDEX_TOKEN = "SnapAct screenshot memory";
+
 function isUnfinishedMemory(mem: {
   searchable_text?: string;
   metadata?: Record<string, unknown>;
@@ -321,7 +324,12 @@ export class MemoryStore {
           externalId,
           imagePath,
           contentType: input.contentType,
-          description: [`Saved on ${nowIso().slice(0, 10)}`, analysis?.title, analysis?.description]
+          description: [
+            SNAPACT_INDEX_TOKEN,
+            `Saved on ${nowIso().slice(0, 10)}`,
+            analysis?.title || (input.metadata.title as string),
+            analysis?.description || (input.metadata.description as string),
+          ]
             .filter((part) => typeof part === "string" && part.trim())
             .join(". ")
             .slice(0, 400),
@@ -334,8 +342,8 @@ export class MemoryStore {
             searchable_text: input.searchableText,
             content_type: analysis?.content_type,
             intent_mode: analysis?.intent_mode,
-            title: analysis?.title,
-            summary: analysis?.description,
+            title: analysis?.title || input.metadata.title,
+            summary: analysis?.description || input.metadata.description,
             tags: analysis?.tags,
             event: analysis?.event,
             temporal: analysis?.temporal || input.metadata.temporal,
@@ -418,7 +426,9 @@ export class MemoryStore {
     if (cfg.memorySearchEndpoint && !cfg.memoryListEndpoint) {
       try {
         const filterType = String(input.filters?.content_type || "").trim();
-        const probes = filterType ? [filterType] : ["event", "knowledge"];
+        const probes = filterType
+          ? [filterType]
+          : [SNAPACT_INDEX_TOKEN, "event", "knowledge", "quote", "place"];
         const byId = new Map<string, MemoryRecord>();
         for (const query of probes) {
           const hits = await ragSearch({ query, topK: 8, signImages: false }).catch((error) => {

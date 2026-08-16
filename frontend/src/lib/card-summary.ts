@@ -20,7 +20,8 @@ export function cardSummary(input: {
 
 export function shortenIndexBlob(text: string, title = "") {
   let t = text.replace(/\s+/g, " ").trim();
-  t = t.replace(/Uploaded at \S+/gi, "");
+  t = t.replace(/SnapAct screenshot memory[.\\s]*/gi, "");
+  t = t.replace(/Saved on \d{4}-\d{2}-\d{2}[.\\s]*/gi, "");
   t = t.replace(/Due date:\s*\S+/gi, "");
   t = t.replace(/Things to do[^.]*\.?/gi, "");
   t = t.replace(/User context:.*$/i, "");

@@ -179,7 +179,7 @@ export async function ragSearch(input: {
 
   const url = new URL(cfg.memorySearchEndpoint);
   url.searchParams.set("q", input.query);
-  url.searchParams.set("limit", String(input.topK ?? 5));
+  url.searchParams.set("limit", String(Math.min(8, Math.max(1, input.topK ?? 5))));
 
   const res = await fetch(url, {
     method: "GET",

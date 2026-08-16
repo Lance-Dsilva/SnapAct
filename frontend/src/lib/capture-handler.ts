@@ -5,7 +5,7 @@ import { formatAskFromMemories, retrieveAskMemories } from "@/lib/ask-flow";
 import { getConfig } from "@/lib/config";
 import { getIdempotent, setIdempotent } from "@/lib/idempotency";
 import { validateImageFile } from "@/lib/image";
-import { getMemoryStore } from "@/lib/memory/memory-store";
+import { getMemoryStore, SNAPACT_INDEX_TOKEN } from "@/lib/memory/memory-store";
 import { makeImagePath, uploadScreenshot } from "@/lib/memory/supabase-storage";
 import type { CaptureMode, MemoryAnalysis } from "@/lib/schemas/memory";
 
@@ -85,6 +85,28 @@ export async function handleCapture(req: Request, forcedMode?: CaptureMode) {
           err instanceof Error ? `Could not save screenshot: ${err.message}` : "Could not save screenshot.",
           502,
         );
+      }
+
+      try {
+        await store.saveMemory({
+          userId: cfg.demoUserId,
+          imageBytes,
+          contentType,
+          metadata: {
+            title: "Screenshot",
+            content_type: "other",
+            intent_mode: "REMEMBER",
+            description: "Saved just now.",
+            source,
+            captured_at: capturedAt,
+            mode: "save",
+          },
+          searchableText: `${SNAPACT_INDEX_TOKEN}. Saved on ${new Date().toISOString()}.`,
+          clientRequestId: saveId,
+          skipUpload: true,
+        });
+      } catch (err) {
+        console.error(`[capture] immediate index failed request_id=${requestId}`, err);
       }
 
       after(async () => {
