@@ -169,6 +169,7 @@ async function withSignedImage(hit: RagSearchHit): Promise<RagSearchHit> {
 export async function ragSearch(input: {
   query: string;
   topK?: number;
+  signImages?: boolean;
 }): Promise<RagSearchHit[]> {
   const cfg = getConfig();
   if (!cfg.memorySearchEndpoint) throw new Error("MEMORY_SEARCH_ENDPOINT is not set");
@@ -188,5 +189,6 @@ export async function ragSearch(input: {
   }
   const payload = await res.json();
   const hits = extractItems(payload).map((item, index) => normalizeHit(item, index));
+  if (input.signImages === false) return hits;
   return Promise.all(hits.map((hit) => withSignedImage(hit)));
 }

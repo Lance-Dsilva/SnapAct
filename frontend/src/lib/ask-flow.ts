@@ -14,13 +14,19 @@ export type AskMemory = {
   metadata: Record<string, unknown>;
 };
 
-export async function retrieveAskMemories(question: string, topK = 8): Promise<AskMemory[]> {
+export async function retrieveAskMemories(
+  question: string,
+  topK = 8,
+  opts?: { requireImage?: boolean; signImages?: boolean },
+): Promise<AskMemory[]> {
   const cfg = getConfig();
   const store = getMemoryStore();
   const hits = await store.searchMemories({
     userId: cfg.demoUserId,
     query: question,
     topK,
+    requireImage: opts?.requireImage,
+    signImages: opts?.signImages,
   });
   return hits.map((hit) => {
     const meta = hit.metadata || {};
@@ -51,6 +57,39 @@ export function visibleAskMarkdown(raw: string) {
     }
   }
   return cut;
+}
+
+export function formatAskFromMemories(question: string, memories: AskMemory[]) {
+  if (!memories.length) {
+    const answer = `I could not find matching screenshots for “${question}”.`;
+    return {
+      answer,
+      short_message: answer,
+      citations: [] as unknown[],
+      agent_activity: ["Retrieved memories"],
+    };
+  }
+  const lines = memories.slice(0, 5).map((m, i) => {
+    const event = (m.metadata.event || m.metadata.analysis && (m.metadata.analysis as { event?: Record<string, string> }).event) as
+      | Record<string, string>
+      | undefined;
+    const when = event?.date || "";
+    const where = event?.location || "";
+    const extra = [when, where].filter(Boolean).join(" · ");
+    const blurb = extra || (m.description || "").split(/(?<=[.!?])\s/)[0] || "";
+    return `${i + 1}. **${m.title}**${blurb ? ` — ${blurb}` : ""}`;
+  });
+  const answer = `From your saved screenshots for “${question}”:\n\n${lines.join("\n")}`;
+  const short = memories
+    .slice(0, 2)
+    .map((m) => m.title)
+    .join("; ");
+  return {
+    answer,
+    short_message: short.slice(0, 280),
+    citations: [] as unknown[],
+    agent_activity: ["Retrieved memories", "Formatted without a model for speed"],
+  };
 }
 
 export async function synthesizeAsk(input: {

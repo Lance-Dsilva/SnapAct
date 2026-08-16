@@ -346,6 +346,8 @@ export class MemoryStore {
     query: string;
     topK?: number;
     filters?: Record<string, unknown>;
+    requireImage?: boolean;
+    signImages?: boolean;
   }): Promise<MemorySearchHit[]> {
     seedDemoIfNeeded();
     const cfg = getConfig();
@@ -354,10 +356,11 @@ export class MemoryStore {
         const hits = await ragSearch({
           query: input.query,
           topK: input.topK ?? 5,
+          signImages: input.signImages,
         });
         return hits
           .map((item) => this.hitToSearch(item))
-          .filter((hit) => Boolean(hit.image_url) && !isUnfinishedMemory(hit));
+          .filter((hit) => (input.requireImage === false || Boolean(hit.image_url)) && !isUnfinishedMemory(hit));
       } catch (error) {
         console.warn("RAG search failed; falling back to mock store", error);
         if (usingRemoteMemory()) return [];

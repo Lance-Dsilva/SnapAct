@@ -1,31 +1,20 @@
 import { handleCapture } from "@/lib/capture-handler";
-import { retrieveAskMemories, synthesizeAsk, visibleAskMarkdown } from "@/lib/ask-flow";
+import { formatAskFromMemories, retrieveAskMemories } from "@/lib/ask-flow";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-function sse(data: unknown) {
-  return `data: ${JSON.stringify(data)}\n\n`;
-}
-
 async function readQuestion(req: Request): Promise<{
   question: string;
-  stream: boolean;
   hasImage: boolean;
-  raw: Request;
 }> {
-  const accept = req.headers.get("accept") || "";
-  const url = new URL(req.url);
-  const streamFlag = url.searchParams.get("stream") === "1" || accept.includes("text/event-stream");
   const contentType = req.headers.get("content-type") || "";
 
   if (contentType.includes("application/json")) {
     const body = await req.json().catch(() => ({}));
     return {
       question: String(body.question || body.text || body.q || "").trim(),
-      stream: streamFlag || Boolean(body.stream),
       hasImage: false,
-      raw: req,
     };
   }
 
@@ -36,9 +25,7 @@ async function readQuestion(req: Request): Promise<{
   ).trim();
   return {
     question,
-    stream: streamFlag || String(form.get("stream") || "") === "1",
     hasImage: image instanceof File,
-    raw: req,
   };
 }
 
@@ -55,53 +42,16 @@ export async function POST(req: Request) {
     );
   }
 
-  const memories = await retrieveAskMemories(parsed.question, 8);
-
-  if (!parsed.stream) {
-    const synthesized = await synthesizeAsk({ question: parsed.question, memories });
-    return Response.json({
-      answer: synthesized.answer,
-      short_message: synthesized.short_message,
-      memories,
-      citations: synthesized.citations,
-      agent_activity: synthesized.agent_activity,
-    });
-  }
-
-  const encoder = new TextEncoder();
-  const readable = new ReadableStream({
-    async start(controller) {
-      const send = (payload: unknown) => controller.enqueue(encoder.encode(sse(payload)));
-      try {
-        send({ type: "memories", memories });
-        let raw = "";
-        const synthesized = await synthesizeAsk({
-          question: parsed.question,
-          memories,
-          onText(chunk) {
-            raw += chunk;
-            send({ type: "delta", text: visibleAskMarkdown(raw) });
-          },
-        });
-        send({
-          type: "done",
-          answer: synthesized.answer,
-          short_message: synthesized.short_message,
-          memories,
-        });
-      } catch (err) {
-        send({ type: "error", detail: err instanceof Error ? err.message : "Ask failed" });
-      } finally {
-        controller.close();
-      }
-    },
+  const memories = await retrieveAskMemories(parsed.question, 5, {
+    requireImage: false,
+    signImages: false,
   });
-
-  return new Response(readable, {
-    headers: {
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-    },
+  const synthesized = formatAskFromMemories(parsed.question, memories);
+  return Response.json({
+    answer: synthesized.answer,
+    short_message: synthesized.short_message,
+    memories,
+    citations: synthesized.citations,
+    agent_activity: synthesized.agent_activity,
   });
 }

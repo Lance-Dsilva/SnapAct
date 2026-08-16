@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { Agent, Cursor, CursorAgentError, JsonlLocalAgentStore } from "@cursor/sdk";
 import type { SDKCustomTool, SDKJsonValue } from "@cursor/sdk";
 import { getConfig, cursorConfigured } from "@/lib/config";
+import { detectAskIntents } from "@/lib/ask-intents";
 import { getMemoryStore } from "@/lib/memory/memory-store";
 import {
   FEED_REFRESH_SYSTEM,
@@ -553,12 +554,16 @@ export async function analyzeScreenshot(input: {
     return mockAnalyzeScreenshot(input);
   }
 
+  const intents = input.mode === "ask" ? detectAskIntents(input.question) : { similar: false, web: true };
+
   const userText = buildScreenshotUserPrompt({
     mode: input.mode,
     question: input.question,
     userDescription: input.userDescription,
     source: input.source,
     capturedAt: input.capturedAt,
+    similarMemories: intents.similar,
+    webSearch: intents.web,
   });
 
   try {
@@ -567,7 +572,8 @@ export async function analyzeScreenshot(input: {
       userText,
       imageBase64: input.imageBytes.toString("base64"),
       mimeType: input.mimeType,
-      enableMemoryTools: false,
+      enableMemoryTools: input.mode === "ask" && intents.similar,
+      tools: input.mode === "ask" ? (intents.web ? ["webSearch", "webFetch"] : []) : undefined,
       label: `capture:${input.mode}`,
     });
     const data = extractJsonObject(text);
@@ -579,7 +585,7 @@ export async function analyzeScreenshot(input: {
       toolsUsed: meta.toolsUsed,
       webSearchUsed: meta.webSearchUsed,
     });
-    if (analysis.needs_live_search && !meta.webSearchUsed) {
+    if (intents.web && analysis.needs_live_search && !meta.webSearchUsed) {
       analysis.live_verification_failed = true;
       if (!analysis.agent_activity.some((s) => /unavailable|failed/i.test(s))) {
         analysis.agent_activity = [

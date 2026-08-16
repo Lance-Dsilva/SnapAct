@@ -1,5 +1,7 @@
 import { after, NextResponse } from "next/server";
 import { analyzeScreenshot, SnapActAgentError } from "@/lib/agents/snapact-agent";
+import { detectAskIntents } from "@/lib/ask-intents";
+import { formatAskFromMemories, retrieveAskMemories } from "@/lib/ask-flow";
 import { getConfig } from "@/lib/config";
 import { getIdempotent, setIdempotent } from "@/lib/idempotency";
 import { validateImageFile } from "@/lib/image";
@@ -168,6 +170,22 @@ export async function handleCapture(req: Request, forcedMode?: CaptureMode) {
       analysis = result.analysis;
       modelUsed = result.meta.model;
       toolsUsed = result.meta.toolsUsed;
+      if (mode === "ask" && question && detectAskIntents(question).similar) {
+        const ragQuery = [analysis.title, analysis.content_type, analysis.description]
+          .filter(Boolean)
+          .join(" ")
+          .slice(0, 400) || question;
+        const similar = await retrieveAskMemories(ragQuery, 5, {
+          requireImage: false,
+          signImages: false,
+        });
+        const formatted = formatAskFromMemories("similar saved screenshots", similar);
+        if (similar.length) {
+          analysis.answer = `${analysis.answer || analysis.description || analysis.title}\n\nSimilar in your memory:\n\n${formatted.answer.replace(/^From your saved screenshots[^\n]*\n\n/, "")}`;
+          analysis.short_message = `${analysis.short_message || analysis.title}. Also found ${similar.length} similar saved screenshot(s).`.slice(0, 500);
+          analysis.agent_activity = [...(analysis.agent_activity || []), "Searched similar memories"];
+        }
+      }
       if (analysis.live_verification_failed) {
         degraded = true;
         warning =

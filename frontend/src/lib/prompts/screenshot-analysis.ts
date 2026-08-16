@@ -26,6 +26,7 @@ Rules:
 - Never include private chain-of-thought. Put only high-level activity strings in agent_activity.
 - searchable_text must be a rich natural-language blob for vector indexing.
 - Always set short_message (1-2 sentences) suitable for Apple Shortcut Show Result.
+- ASK mode is image-first: answer the user question from the screenshot. Do not web-search unless the prompt says WEB_SEARCH=yes. Do not search saved memories unless SIMILAR_MEMORIES=yes.
 `;
 
 export function buildScreenshotUserPrompt(input: {
@@ -34,6 +35,8 @@ export function buildScreenshotUserPrompt(input: {
   userDescription?: string | null;
   source?: string | null;
   capturedAt?: string | null;
+  similarMemories?: boolean;
+  webSearch?: boolean;
 }): string {
   const parts = [
     `Capture mode: ${input.mode}`,
@@ -44,7 +47,25 @@ export function buildScreenshotUserPrompt(input: {
   ];
 
   if (input.mode === "ask") {
-    parts.push("", `User question: ${input.question}`, "Answer using the screenshot and tools only when needed.");
+    parts.push(
+      "",
+      `User question: ${input.question}`,
+      "PRIMARY TASK: understand the screenshot and answer that question from the image.",
+      `SIMILAR_MEMORIES=${input.similarMemories ? "yes" : "no"}`,
+      `WEB_SEARCH=${input.webSearch ? "yes" : "no"}`,
+    );
+    if (input.similarMemories) {
+      parts.push(
+        "The user wants similar saved screenshots. After answering from the image, use search_memories and include matches in answer.",
+      );
+    }
+    if (input.webSearch) {
+      parts.push("The user asked for a web search. You may use webSearch / webFetch.");
+    }
+    if (!input.similarMemories && !input.webSearch) {
+      parts.push("Do not use tools. Answer only from the screenshot.");
+    }
+    parts.push("Put the user-facing answer in the JSON `answer` field with real line breaks.");
   } else if (input.mode === "describe") {
     parts.push(
       "",
