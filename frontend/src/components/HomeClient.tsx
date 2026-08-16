@@ -77,7 +77,6 @@ export default function HomeClient() {
       const live = mems.memories.filter((m) => {
         const blob = `${m.title} ${m.description}`;
         return (
-          Boolean(m.image_url) &&
           !/analysis is running in the background/i.test(blob) &&
           m.title !== "Saved screenshot"
         );
@@ -126,7 +125,7 @@ export default function HomeClient() {
     ? feed.follow_ups
     : memories.filter((m) => matchesType(m, "person_followup")).map(toItem);
   const recent = (feed?.recent?.length ? feed.recent : memories.map(toItem)).filter(
-    (item) => Boolean(item.image_url),
+    (item) => Boolean(item.image_url) || Boolean(item.title),
   );
   const visibleRecent = showAllScreenshots ? recent : recent.slice(0, 3);
   const todos = feed?.needs_attention || [];

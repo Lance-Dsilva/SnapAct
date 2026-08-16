@@ -295,10 +295,15 @@ export class MemoryStore {
           externalId,
           imagePath,
           contentType: input.contentType,
-          description:
-            (input.metadata.description as string) ||
-            analysis?.description ||
+          description: [
+            "Saved screenshot",
+            analysis?.title,
+            (input.metadata.description as string) || analysis?.description,
             input.searchableText,
+          ]
+            .filter((part) => typeof part === "string" && part.trim())
+            .join(". ")
+            .slice(0, 4000),
           ocrText: analysis?.extracted_text_summary || input.searchableText,
           category: (input.metadata.content_type as string) || analysis?.content_type || "other",
           metadata: {
@@ -382,15 +387,37 @@ export class MemoryStore {
     if (cfg.memorySearchEndpoint && !cfg.memoryListEndpoint) {
       try {
         const filterType = String(input.filters?.content_type || "").trim();
-        const hits = await this.searchMemories({
-          userId: input.userId,
-          query: filterType || "event",
-          topK: 8,
-        });
-        let records = hits
-          .map((hit) => store().memories.get(hit.memory_id))
-          .filter((mem): mem is MemoryRecord => Boolean(mem));
-        records.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+        const probes = filterType
+          ? [filterType]
+          : ["screenshot", "event", "quote", "place", "research", "remember"];
+        const batches = await Promise.all(
+          probes.map((query) =>
+            ragSearch({ query, topK: 12 }).catch((error) => {
+              console.warn(`RAG list probe failed query=${query}`, error);
+              return [] as RagSearchHit[];
+            }),
+          ),
+        );
+        const byId = new Map<string, MemoryRecord>();
+        for (const hit of batches.flat()) {
+          const record = this.hitToRecord(hit, input.userId);
+          if (isUnfinishedMemory(record)) continue;
+          const prev = byId.get(record.memory_id);
+          if (!prev || (prev.created_at || "") < (record.created_at || "")) {
+            byId.set(record.memory_id, record);
+          }
+        }
+        for (const mem of store().memories.values()) {
+          if (mem.user_id !== input.userId || isUnfinishedMemory(mem)) continue;
+          byId.set(mem.memory_id, mem);
+        }
+        let records = [...byId.values()].sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+        if (filterType) {
+          records = records.filter((mem) => {
+            const ct = String(mem.analysis?.content_type || mem.metadata.content_type || "");
+            return ct === filterType;
+          });
+        }
         records = records.slice(0, input.limit ?? 40);
         if (records.length || usingRemoteMemory()) return records;
       } catch (error) {
@@ -463,7 +490,10 @@ export class MemoryStore {
   }
 
   private hitToRecord(item: RagSearchHit, userId: string): MemoryRecord {
-    const local = store().memories.get(item.memory_id);
+    const externalId = String(item.metadata.external_id || "");
+    const local =
+      store().memories.get(item.memory_id) ||
+      (externalId ? store().memories.get(externalId) : undefined);
     const contentType = inferContentType(item);
     const title = titleFromHit(item, contentType);
     const existing = (item.metadata.analysis as MemoryAnalysis) || local?.analysis || null;
