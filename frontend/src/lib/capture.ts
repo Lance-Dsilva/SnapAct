@@ -30,7 +30,8 @@ import { synthesizeAnswer } from "@/lib/agent";
 import type { CaptureMode, Memory, ScreenshotAnalysis } from "@/lib/schemas/memory";
 
 function jsonError(message: string, status = 400, extra?: Record<string, unknown>) {
-  return NextResponse.json({ error: message, ...extra }, { status });
+  // `detail` mirrors `error` so Shortcuts built against the previous API keep working.
+  return NextResponse.json({ error: message, detail: message, ...extra }, { status });
 }
 
 function formText(form: FormData, ...keys: string[]): string | null {
@@ -106,8 +107,19 @@ export async function handleCapture(req: Request, forcedMode?: CaptureMode) {
     return jsonError("An image is required (multipart field: image).");
   }
 
+  // Every alias the previous API accepted is still accepted, camelCase included,
+  // so an existing iPhone Shortcut needs no edits.
   const question = formText(form, "question", "q", "ask", "text");
-  const userNote = formText(form, "user_note", "user_description", "note", "description", "text");
+  const userNote = formText(
+    form,
+    "user_note",
+    "userNote",
+    "user_description",
+    "userDescription",
+    "note",
+    "description",
+    "text",
+  );
   const source = formText(form, "source") || "iphone";
   const capturedAt = formText(form, "captured_at") || new Date().toISOString();
   const clientRequestId = formText(form, "client_request_id") || crypto.randomUUID();
