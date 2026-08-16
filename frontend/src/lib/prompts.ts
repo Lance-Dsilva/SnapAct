@@ -35,10 +35,11 @@ DATES — the single most common source of wrong data. Obey exactly:
 - If you cannot determine a date with confidence, emit null. NEVER guess a date,
   and never use today's date as a placeholder.
 
-OCR — transcribe the meaningful visible text: names, prices, dates, addresses,
-handles, headlines, the body of a quote. Skip status bars, battery and signal
-icons, nav chrome, and keyboard rows. This text is indexed for search, so accuracy
-matters more than completeness.
+OCR — transcribe only the text that carries meaning: names, prices, dates,
+addresses, handles, headlines, the body of a quote. Skip status bars, battery and
+signal icons, nav chrome, and keyboard rows. Hard limit 500 characters — this is a
+search index, not a transcript, so pick the text someone would search by rather
+than everything on screen.
 
 TAGS — 3 to 8 lowercase tags a person would actually search by. Prefer concrete
 nouns (proper names, places, brands, topics) over generic ones. Never emit
@@ -115,8 +116,8 @@ export const SCREENSHOT_JSON_SHAPE = `{
   "content_type": one of the listed types,
   "intent_mode": "REMEMBER" | "EXPLORE" | "ACT",
   "intent_summary": string,             // one sentence: why this was probably saved
-  "description": string,                // 1-3 sentences describing what is on screen
-  "ocr_text": string,                   // meaningful visible text, "" if none
+  "description": string,                // 1-2 sentences describing what is on screen
+  "ocr_text": string,                   // <= 500 chars of meaningful text, "" if none
   "tags": string[],
   "entities": [{"name": string, "type": "person"|"place"|"company"|"product"|"event"|"other"}],
   "actionable": boolean,
@@ -134,6 +135,40 @@ export const SCREENSHOT_JSON_SHAPE = `{
   "short_message": string,              // 1-2 plain sentences for the iPhone Shortcut result
   "agent_activity": string[]
 }`;
+
+/**
+ * Ask-about-this-screenshot, answer only.
+ *
+ * The full metadata schema costs ~20s to generate; this returns ~250 bytes in
+ * ~5s. The user gets their answer straight away and the same screenshot is
+ * analyzed properly in the background, so nothing is lost — only deferred.
+ */
+export const ASK_IMAGE_SYSTEM = `You answer a question about a single screenshot.
+
+Look at the image and answer the question directly, using only what is visible.
+Quote exact figures — dates, prices, addresses, names — when they appear.
+If the screenshot does not contain the answer, say so plainly rather than guessing.
+Do not identify unrecognized private individuals from their face.
+
+Return ONLY valid JSON, no prose and no code fence:
+{
+  "answer": string,          // Markdown, real line breaks, 1-3 sentences
+  "short_message": string,   // one plain sentence for an iPhone Shortcut, no Markdown
+  "title": string            // short noun phrase naming the screenshot, <= 60 chars
+}`;
+
+export function buildAskImagePrompt(input: {
+  question: string;
+  capturedAt?: string | null;
+}) {
+  const capturedAt = input.capturedAt || new Date().toISOString();
+  return [
+    `Captured at: ${capturedAt}  (resolve relative dates against this)`,
+    `Today: ${capturedAt.slice(0, 10)}`,
+    "",
+    `Question: ${input.question}`,
+  ].join("\n");
+}
 
 /* ---------------------------------------------------------------- retrieval */
 
@@ -209,6 +244,54 @@ export function buildRelevanceGatePrompt(
 }
 
 /* ------------------------------------------------------------------- answer */
+
+/**
+ * Relevance judgement and answering in a single call.
+ *
+ * Splitting these into two model calls cost ~10s. Merging them keeps the strict
+ * "answer nothing rather than answer wrongly" rule, but it has to be stated even
+ * more forcefully here: a model asked to write an answer is strongly inclined to
+ * write one, so the refusal path is made explicit and given its own output token.
+ */
+export const ANSWER_WITH_GATE_SYSTEM = `You answer questions about someone's own saved screenshots.
+
+You will be given a question and a set of candidate memories. The candidates came
+from a similarity search that CANNOT tell a real match from a coincidental one, so
+assume some — often all — are irrelevant.
+
+STEP 1. Decide which candidates genuinely help answer the question.
+Be strict. A candidate is relevant only if it actually bears on what was asked,
+not merely because it is the closest thing available. "The best of a bad set" is
+still irrelevant. A user is far better served by "you haven't saved anything about
+that" than by a confident answer assembled from unrelated screenshots.
+
+STEP 2A. If NO candidate is relevant, reply with exactly this and nothing else:
+NO_MATCH
+
+STEP 2B. If at least one is relevant, answer from those candidates only.
+- BE BRIEF. One or two sentences, unless the question asks for a list — then one
+  short line per item. Brevity is a hard requirement, not a preference.
+- Lead with the answer. No preamble like "Based on your screenshots".
+- Markdown, real line breaks, never the two-character sequence \\n.
+- Name a memory by bolding its title: **Suerte**.
+- Include the specific dates, prices and locations the memories carry.
+- Never state a fact the candidates do not contain, and never pad.
+
+Then a line containing exactly:
+---SHORT---
+Then one plain sentence for an iPhone Shortcut. No Markdown.
+
+Then a final line listing the ids you actually used:
+---USED---
+comma,separated,ids`;
+
+export function buildAnswerWithGatePrompt(
+  question: string,
+  memoriesJson: string,
+  today: string,
+) {
+  return `Today: ${today}\n\nQuestion: ${question}\n\nCandidate memories (JSON):\n${memoriesJson}\n\nJudge relevance, then answer — or reply NO_MATCH.`;
+}
 
 export const ANSWER_SYSTEM = `You answer questions about someone's own saved screenshots.
 

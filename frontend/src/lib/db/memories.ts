@@ -219,7 +219,9 @@ export async function listMemories(filters: ListFilters): Promise<Memory[]> {
     .select(COLUMNS)
     .eq("user_id", filters.userId);
 
-  query = query.in("status", filters.status ?? ["ready"]);
+  // Pending rows are included by default so a just-saved screenshot appears on
+  // Home immediately, showing as "Reading…" until enrichment finishes.
+  query = query.in("status", filters.status ?? ["ready", "pending"]);
 
   if (filters.contentTypes?.length) query = query.in("content_type", filters.contentTypes);
   if (filters.intentModes?.length) query = query.in("intent_mode", filters.intentModes);

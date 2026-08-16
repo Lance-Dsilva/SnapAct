@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { SourcesList } from "@/components/Cards";
 import { Header } from "@/components/Header";
 import { MarkdownAnswer } from "@/components/MarkdownAnswer";
-import { getMemory } from "@/lib/api";
+import { waitForReady } from "@/lib/api";
 import { intentColor, relativeDay, typeLabel } from "@/lib/labels";
 import type { CaptureResponse, Memory } from "@/types";
 
@@ -19,6 +19,8 @@ export default function ResultClient({ memoryId }: { memoryId: string }) {
   const [memory, setMemory] = useState<Memory | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [analyzing, setAnalyzing] = useState(false);
+
   useEffect(() => {
     const cached = sessionStorage.getItem(`snapact:capture:${memoryId}`);
     if (cached) {
@@ -28,9 +30,25 @@ export default function ResultClient({ memoryId }: { memoryId: string }) {
         /* fall through to the fetch */
       }
     }
-    getMemory(memoryId)
-      .then(setMemory)
-      .catch((e) => setError(e instanceof Error ? e.message : "Could not load the memory"));
+
+    let cancelled = false;
+    setAnalyzing(true);
+    // The capture returned before analysis finished, so poll until the organized
+    // version lands. The screenshot is already saved either way.
+    waitForReady(memoryId)
+      .then((latest) => {
+        if (!cancelled) setMemory(latest);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Could not load the memory");
+      })
+      .finally(() => {
+        if (!cancelled) setAnalyzing(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [memoryId]);
 
   const title = memory?.title || capture?.title;
@@ -70,6 +88,11 @@ export default function ResultClient({ memoryId }: { memoryId: string }) {
         <p className="text-sm font-medium text-teal-900">
           {capture?.short_message || "Saved to SnapAct"}
         </p>
+        {analyzing && memory?.status !== "ready" ? (
+          <p className="mt-1 animate-pulse text-xs text-teal-800">
+            Reading the screenshot and filing it…
+          </p>
+        ) : null}
       </div>
 
       {imageUrl ? (

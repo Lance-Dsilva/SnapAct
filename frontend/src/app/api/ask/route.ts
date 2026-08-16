@@ -1,6 +1,7 @@
-import { synthesizeAnswer } from "@/lib/agent";
+import { after } from "next/server";
 import { getConfig } from "@/lib/config";
-import { retrieve, toAnswerContext } from "@/lib/retrieval/retrieve";
+import { sweepStalled } from "@/lib/enrich";
+import { askMemories } from "@/lib/retrieval/retrieve";
 import { serializeRetrieved } from "@/lib/serialize";
 
 export const runtime = "nodejs";
@@ -11,15 +12,17 @@ function sse(payload: unknown) {
 }
 
 /**
- * Honest answer when retrieval finds nothing. The old flow always had memories to
- * hand — even for a nonsense query — and always produced a confident answer from
- * them. Saying "I don't have that" is a feature.
+ * Honest answer when nothing relevant was found. The old flow always had
+ * memories to hand — even for a nonsense query — and always produced a confident
+ * answer from them. Saying "I don't have that" is a feature.
  */
 function emptyAnswer(question: string, filteredToNothing: boolean) {
-  const answer = filteredToNothing
-    ? `I don't have any saved screenshots that answer "${question}".\n\nI found some that were loosely similar, but none of them actually relate to what you asked.`
-    : `I don't have any saved screenshots about "${question}" yet.`;
-  return { answer, short_message: `Nothing saved about that yet.` };
+  return {
+    answer: filteredToNothing
+      ? `I don't have any saved screenshots that answer "${question}".\n\nSome were loosely similar, but none actually relate to what you asked.`
+      : `I don't have any saved screenshots about "${question}" yet.`,
+    short_message: "Nothing saved about that yet.",
+  };
 }
 
 export async function POST(req: Request) {
@@ -34,29 +37,23 @@ export async function POST(req: Request) {
     return Response.json({ error: "A question is required." }, { status: 400 });
   }
 
+  after(() => sweepStalled(cfg.demoUserId));
+
   if (!wantsStream) {
     try {
-      const found = await retrieve({ userId: cfg.demoUserId, question, limit });
-      if (!found.memories.length) {
-        const empty = emptyAnswer(question, found.filteredToNothing);
+      const result = await askMemories({ userId: cfg.demoUserId, question, limit });
+      if (!result.matched) {
         return Response.json({
-          ...empty,
+          ...emptyAnswer(question, result.filteredToNothing),
           memories: [],
-          considered: found.candidatesConsidered,
-          rejected: found.rejected,
+          considered: result.candidatesConsidered,
         });
       }
-      const synthesized = await synthesizeAnswer({
-        question,
-        memories: toAnswerContext(found.memories),
-      });
       return Response.json({
-        answer: synthesized.answer,
-        short_message: synthesized.short_message,
-        memories: found.memories.map(serializeRetrieved),
-        considered: found.candidatesConsidered,
-        rejected: found.rejected,
-        plan: found.plan,
+        answer: result.answer,
+        short_message: result.short_message,
+        memories: result.memories.map(serializeRetrieved),
+        considered: result.candidatesConsidered,
       });
     } catch (err) {
       return Response.json(
@@ -72,38 +69,37 @@ export async function POST(req: Request) {
       const send = (payload: unknown) => controller.enqueue(encoder.encode(sse(payload)));
       try {
         send({ type: "status", text: "Searching your screenshots" });
-        const found = await retrieve({ userId: cfg.demoUserId, question, limit });
 
-        send({
-          type: "memories",
-          memories: found.memories.map(serializeRetrieved),
-          considered: found.candidatesConsidered,
-          rejected: found.rejected,
+        let buffer = "";
+        const result = await askMemories({
+          userId: cfg.demoUserId,
+          question,
+          limit,
+          onText(chunk) {
+            buffer += chunk;
+            // Suppress the refusal token and the trailing control blocks.
+            const visible = buffer.split(/\n?---SHORT---|\n?---USED---/)[0];
+            if (!/NO_MATCH/.test(visible)) send({ type: "delta", text: visible });
+          },
         });
 
-        if (!found.memories.length) {
-          const empty = emptyAnswer(question, found.filteredToNothing);
+        if (!result.matched) {
+          const empty = emptyAnswer(question, result.filteredToNothing);
           send({ type: "delta", text: empty.answer });
           send({ type: "done", ...empty, memories: [] });
           return;
         }
 
-        send({ type: "status", text: "Reading what you saved" });
-        let buffer = "";
-        const synthesized = await synthesizeAnswer({
-          question,
-          memories: toAnswerContext(found.memories),
-          onText(chunk) {
-            buffer += chunk;
-            send({ type: "delta", text: buffer.split(/\n?---SHORT---/)[0] });
-          },
+        send({
+          type: "memories",
+          memories: result.memories.map(serializeRetrieved),
+          considered: result.candidatesConsidered,
         });
-
         send({
           type: "done",
-          answer: synthesized.answer,
-          short_message: synthesized.short_message,
-          memories: found.memories.map(serializeRetrieved),
+          answer: result.answer,
+          short_message: result.short_message,
+          memories: result.memories.map(serializeRetrieved),
         });
       } catch (err) {
         send({ type: "error", error: err instanceof Error ? err.message : "Ask failed" });

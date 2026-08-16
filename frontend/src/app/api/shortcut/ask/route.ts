@@ -1,7 +1,8 @@
-import { synthesizeAnswer } from "@/lib/agent";
+import { after } from "next/server";
 import { handleCapture } from "@/lib/capture";
 import { getConfig } from "@/lib/config";
-import { retrieve, toAnswerContext } from "@/lib/retrieval/retrieve";
+import { sweepStalled } from "@/lib/enrich";
+import { askMemories } from "@/lib/retrieval/retrieve";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -9,9 +10,8 @@ export const maxDuration = 300;
 /**
  * iPhone Shortcut: Ask.
  *
- * With an image, this asks about that screenshot. Without one, it asks across
- * everything already saved. Replies are shaped for a Shortcut "Show Result"
- * card, so `short_message` is always plain text.
+ * With an image, answers about that screenshot. Without one, answers across
+ * everything saved. `short_message` is always plain text for "Show Result".
  */
 export async function POST(req: Request) {
   const contentType = req.headers.get("content-type") || "";
@@ -20,7 +20,7 @@ export async function POST(req: Request) {
   let question = "";
   if (contentType.includes("multipart/form-data")) {
     const form = await req.clone().formData();
-    const image = form.get("image") || form.get("file") || form.get("screenshot");
+    const image = form.get("image") || form.get("file") || form.get("screenshot") || form.get("photo");
     if (image instanceof File) return handleCapture(req, "ask");
     question = String(form.get("question") || form.get("q") || form.get("text") || "").trim();
   } else {
@@ -29,47 +29,34 @@ export async function POST(req: Request) {
   }
 
   if (!question) {
-    return Response.json(
-      { error: "Ask needs a question, or attach a screenshot to ask about it." },
-      { status: 400 },
-    );
+    const message = "Ask needs a question, or attach a screenshot to ask about it.";
+    return Response.json({ error: message, detail: message }, { status: 400 });
   }
 
-  try {
-    const found = await retrieve({ userId: cfg.demoUserId, question, limit: 6 });
+  after(() => sweepStalled(cfg.demoUserId));
 
-    if (!found.memories.length) {
-      const message = found.filteredToNothing
+  try {
+    const result = await askMemories({ userId: cfg.demoUserId, question, limit: 6 });
+
+    if (!result.matched) {
+      const message = result.filteredToNothing
         ? "Nothing you've saved actually relates to that."
         : "You haven't saved anything about that yet.";
-      return Response.json({
-        answer: message,
-        short_message: message,
-        memories: [],
-        considered: found.candidatesConsidered,
-      });
+      return Response.json({ answer: message, short_message: message, memories: [] });
     }
 
-    const synthesized = await synthesizeAnswer({
-      question,
-      memories: toAnswerContext(found.memories),
-    });
-
     return Response.json({
-      answer: synthesized.answer,
-      short_message: synthesized.short_message,
-      memories: found.memories.map((m) => ({
+      answer: result.answer,
+      short_message: result.short_message,
+      memories: result.memories.map((m) => ({
         id: m.id,
         title: m.title,
         content_type: m.content_type,
       })),
-      considered: found.candidatesConsidered,
-      rejected: found.rejected,
+      considered: result.candidatesConsidered,
     });
   } catch (err) {
-    return Response.json(
-      { error: err instanceof Error ? err.message : "Ask failed" },
-      { status: 502 },
-    );
+    const message = err instanceof Error ? err.message : "Ask failed";
+    return Response.json({ error: message, detail: message }, { status: 502 });
   }
 }

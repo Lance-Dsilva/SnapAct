@@ -156,7 +156,7 @@ export function MemoryGridCard({ memory }: { memory: Memory }) {
       <div className="p-3">
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-            {typeLabel(memory.content_type)}
+            {memory.status === "pending" ? "Reading…" : typeLabel(memory.content_type)}
           </span>
           {memory.status === "failed" ? (
             <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800">
@@ -164,12 +164,20 @@ export function MemoryGridCard({ memory }: { memory: Memory }) {
             </span>
           ) : null}
         </div>
-        <h3 className="mt-1 line-clamp-2 text-sm font-medium text-[var(--ink)]">{memory.title}</h3>
-        <span
-          className={`mt-2 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${intentColor(memory.intent_mode)}`}
-        >
-          {memory.intent_mode}
-        </span>
+        <h3 className="mt-1 line-clamp-2 text-sm font-medium text-[var(--ink)]">
+          {memory.status === "pending" ? memory.user_note || "Just saved" : memory.title}
+        </h3>
+        {memory.status === "pending" ? (
+          <span className="mt-2 inline-flex animate-pulse rounded-full border border-[var(--border)] bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+            Analyzing
+          </span>
+        ) : (
+          <span
+            className={`mt-2 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${intentColor(memory.intent_mode)}`}
+          >
+            {memory.intent_mode}
+          </span>
+        )}
       </div>
     </Link>
   );

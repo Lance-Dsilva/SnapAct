@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { getConfig } from "@/lib/config";
 import { countMemories, listMemories, typeCounts, withImageUrls } from "@/lib/db/memories";
+import { sweepStalled } from "@/lib/enrich";
 import { serializeMemory } from "@/lib/serialize";
 import type { Memory } from "@/lib/schemas/memory";
 
@@ -18,6 +19,9 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const cfg = getConfig();
 
+  // Ordinary read traffic doubles as the background repair trigger.
+  after(() => sweepStalled(cfg.demoUserId));
+
   try {
     const today = new Date();
     const todayYmd = today.toISOString().slice(0, 10);
@@ -29,22 +33,23 @@ export async function GET() {
       typeCounts(cfg.demoUserId),
     ]);
 
+    const ready = everything.filter((m) => m.status === "ready");
     const open = (m: Memory) => !m.completed_at;
 
     // Overdue or due within a week, soonest first.
-    const dueSoon = everything
+    const dueSoon = ready
       .filter((m) => open(m) && m.due_on && m.due_on <= inTwoWeeks)
       .sort((a, b) => (a.due_on! < b.due_on! ? -1 : 1));
 
     // Events still ahead of us, soonest first.
-    const upcoming = everything
+    const upcoming = ready
       .filter((m) => m.event_on && m.event_on >= todayYmd)
       .sort((a, b) => (a.event_on! < b.event_on! ? -1 : 1));
 
     const dueOrUpcoming = new Set([...dueSoon, ...upcoming].map((m) => m.id));
 
     // Actionable, urgent, and not already surfaced by a date above.
-    const needsAttention = everything
+    const needsAttention = ready
       .filter(
         (m) =>
           open(m) &&
@@ -58,7 +63,7 @@ export async function GET() {
       })
       .slice(0, 12);
 
-    const exploring = everything
+    const exploring = ready
       .filter((m) => m.intent_mode === "EXPLORE" && open(m))
       .slice(0, 12);
 

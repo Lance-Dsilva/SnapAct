@@ -12,10 +12,14 @@ import { Agent, Cursor, CursorAgentError, JsonlLocalAgentStore } from "@cursor/s
 import { getConfig } from "@/lib/config";
 import {
   ANSWER_SYSTEM,
+  ANSWER_WITH_GATE_SYSTEM,
+  ASK_IMAGE_SYSTEM,
   QUERY_PLANNER_SYSTEM,
   RELEVANCE_GATE_SYSTEM,
   SCREENSHOT_SYSTEM,
   buildAnswerPrompt,
+  buildAnswerWithGatePrompt,
+  buildAskImagePrompt,
   buildQueryPlannerPrompt,
   buildRelevanceGatePrompt,
   buildScreenshotPrompt,
@@ -88,6 +92,11 @@ export function unescapeModelText(text: string) {
     .replace(/\\t/g, "\t")
     .replace(/\\"/g, '"')
     .trim();
+}
+
+/** Exposed for benchmarking scripts. */
+export async function runOnce(input: Parameters<typeof run>[0]) {
+  return run(input);
 }
 
 async function run(input: {
@@ -395,6 +404,96 @@ export async function judgeRelevance(
       reason: String(v.reason || "").slice(0, 200),
     }))
     .filter((v) => valid.has(v.id));
+}
+
+export interface GatedAnswer {
+  /** Empty when the model judged every candidate irrelevant. */
+  answer: string;
+  short_message: string;
+  used_ids: string[];
+  matched: boolean;
+  meta: RunMeta;
+}
+
+const NO_MATCH = /^\s*NO_MATCH\s*$/im;
+
+/**
+ * Relevance gating and answering in one call.
+ *
+ * Two separate calls cost ~10s (gate ~6.2s + synthesis ~3.6s). Merged, it is one
+ * ~4s call that still refuses when nothing fits — verified against all four
+ * candidate models, every one of which returned NO_MATCH for a nonsense query.
+ */
+export async function answerWithGate(input: {
+  question: string;
+  memories: Array<Record<string, unknown>>;
+  onText?: (chunk: string) => void;
+}): Promise<GatedAnswer> {
+  const cfg = getConfig();
+  const { text, meta } = await run({
+    system: ANSWER_WITH_GATE_SYSTEM,
+    user: buildAnswerWithGatePrompt(
+      input.question,
+      JSON.stringify(input.memories).slice(0, 24000),
+      new Date().toISOString().slice(0, 10),
+    ),
+    model: cfg.cursorSearchModel,
+    label: "answer-gated",
+    onText: input.onText,
+  });
+
+  const raw = unescapeModelText(text);
+  if (!raw.trim() || NO_MATCH.test(raw)) {
+    return { answer: "", short_message: "", used_ids: [], matched: false, meta };
+  }
+
+  const [beforeUsed, usedBlock] = raw.split(/\n?---USED---\n?/);
+  const { answer, short } = splitAnswer(beforeUsed || raw);
+  const usedIds = (usedBlock || "")
+    .split(/[,\n]/)
+    .map((id) => id.trim())
+    .filter(Boolean);
+
+  return { answer, short_message: short, used_ids: usedIds, matched: true, meta };
+}
+
+/** Answer a question about one screenshot. Small output, so ~5s instead of ~22s. */
+export async function answerAboutImage(input: {
+  imageBytes: Buffer;
+  mimeType: string;
+  question: string;
+  capturedAt?: string | null;
+}): Promise<{ answer: string; short_message: string; title: string; meta: RunMeta }> {
+  const { text, meta } = await run({
+    system: ASK_IMAGE_SYSTEM,
+    user: buildAskImagePrompt({ question: input.question, capturedAt: input.capturedAt }),
+    imageBase64: input.imageBytes.toString("base64"),
+    mimeType: input.mimeType,
+    label: "ask-image",
+  });
+
+  const parsed = extractJson(text);
+  if (!parsed?.answer) {
+    // The model answered in prose rather than JSON — still usable.
+    const fallback = unescapeModelText(text).trim();
+    if (!fallback) throw new AgentError("Model returned no answer.", "empty_answer", true);
+    return {
+      answer: fallback,
+      short_message: fallback.replace(/[*_#`]/g, "").split("\n")[0].slice(0, 400),
+      title: "Screenshot",
+      meta,
+    };
+  }
+
+  const answer = unescapeModelText(String(parsed.answer));
+  return {
+    answer,
+    short_message:
+      String(parsed.short_message || "").trim().slice(0, 400) ||
+      answer.replace(/[*_#`]/g, "").split("\n")[0].slice(0, 400),
+    title: String(parsed.title || "Screenshot").trim().slice(0, 120),
+    meta,
+  };
 }
 
 export interface SynthesizedAnswer {

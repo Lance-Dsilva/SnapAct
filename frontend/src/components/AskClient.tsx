@@ -24,7 +24,7 @@ function AskInner() {
   const [status, setStatus] = useState<string | null>(null);
   const [answer, setAnswer] = useState("");
   const [memories, setMemories] = useState<RetrievedMemory[]>([]);
-  const [stats, setStats] = useState<{ considered: number; rejected: number } | null>(null);
+  const [considered, setConsidered] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [asked, setAsked] = useState(false);
   const lastRun = useRef("");
@@ -38,15 +38,15 @@ function AskInner() {
     setError(null);
     setAnswer("");
     setMemories([]);
-    setStats(null);
+    setConsidered(0);
     setStatus("Searching your screenshots");
 
     try {
       const result = await streamAsk(trimmed, {
         onStatus: setStatus,
-        onMemories: (found, considered, rejected) => {
+        onMemories: (found, total) => {
           setMemories(found);
-          setStats({ considered, rejected });
+          setConsidered(total);
         },
         onText: (text) => {
           setStatus(null);
@@ -139,11 +139,10 @@ function AskInner() {
               <ResultCard key={memory.id} memory={memory} />
             ))}
           </div>
-          {/* Being explicit about what was discarded is how the user learns to trust the answer. */}
-          {stats && stats.rejected > 0 ? (
+          {/* Being explicit about the search scope is how the user learns to trust the answer. */}
+          {considered > memories.length ? (
             <p className="mt-3 text-xs text-[var(--muted)]">
-              Checked {stats.considered} screenshots, set aside {stats.rejected} that weren&apos;t
-              relevant.
+              Checked {considered} screenshots, kept the {memories.length} that were relevant.
             </p>
           ) : null}
         </div>

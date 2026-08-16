@@ -215,6 +215,25 @@ export async function captureScreenshot(params: {
   }
 }
 
+/** Poll a memory until background analysis lands (or we give up). */
+export async function waitForReady(
+  id: string,
+  opts?: { timeoutMs?: number; onTick?: (status: string) => void },
+): Promise<Memory> {
+  const timeout = opts?.timeoutMs ?? 45000;
+  const deadline = Date.now() + timeout;
+  let delay = 1200;
+  let latest = await getMemory(id);
+
+  while (latest.status === "pending" && Date.now() < deadline) {
+    opts?.onTick?.(latest.status);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    delay = Math.min(delay * 1.35, 4000);
+    latest = await getMemory(id);
+  }
+  return latest;
+}
+
 export async function fetchStalledCount() {
   const data = await handle<{ stalled: number }>(
     await fetch(url("/api/memories/repair"), { cache: "no-store" }),

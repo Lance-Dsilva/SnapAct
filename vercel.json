@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/memories/repair",
+      "schedule": "0 4 * * *"
+    }
+  ]
+}

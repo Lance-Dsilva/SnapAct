@@ -1,26 +1,26 @@
 import { NextResponse } from "next/server";
 import { getConfig } from "@/lib/config";
-import { retrieve } from "@/lib/retrieval/retrieve";
+import { retrieveCandidates } from "@/lib/retrieval/retrieve";
 import { serializeRetrieved } from "@/lib/serialize";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 60;
 
-async function search(query: string, limit: number, gate: boolean) {
+/**
+ * Raw hybrid search — no model in the loop, so it returns in well under a second.
+ * Relevance gating belongs to /api/ask; browsing wants breadth, not judgement.
+ */
+async function search(query: string, limit: number) {
   const cfg = getConfig();
-  const found = await retrieve({
+  const results = await retrieveCandidates({
     userId: cfg.demoUserId,
-    question: query,
-    limit,
-    useGate: gate,
+    query,
+    limit: Math.min(Math.max(limit, 1), 50),
   });
   return NextResponse.json({
     query,
-    results: found.memories.map(serializeRetrieved),
-    considered: found.candidatesConsidered,
-    rejected: found.rejected,
-    filtered_to_nothing: found.filteredToNothing,
-    plan: found.plan,
+    results: results.map(serializeRetrieved),
+    count: results.length,
   });
 }
 
@@ -29,8 +29,7 @@ export async function GET(req: Request) {
   const query = (searchParams.get("q") || searchParams.get("query") || "").trim();
   if (!query) return NextResponse.json({ error: "q is required" }, { status: 400 });
   try {
-    // Browsing the search box: keep it fast and permissive, no gate.
-    return await search(query, Number(searchParams.get("limit") || 20), false);
+    return await search(query, Number(searchParams.get("limit") || 20));
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Search failed" },
@@ -44,7 +43,7 @@ export async function POST(req: Request) {
   const query = String(body.query || body.q || "").trim();
   if (!query) return NextResponse.json({ error: "query is required" }, { status: 400 });
   try {
-    return await search(query, Number(body.limit || body.top_k || 20), body.gate !== false);
+    return await search(query, Number(body.limit || body.top_k || 20));
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Search failed" },
