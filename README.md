@@ -147,9 +147,10 @@ The Next.js app in `frontend/` is the UI and the API (`/api/*`, including Apple 
 
 Shortcut URLs:
 
-- `POST https://snapact-beta.vercel.app/api/shortcut/save`
-- `POST https://snapact-beta.vercel.app/api/shortcut/ask`
-- `POST https://snapact-beta.vercel.app/api/shortcut/describe`
+- `POST https://snapact-beta.vercel.app/api/shortcut/save` — multipart image
+- `POST https://snapact-beta.vercel.app/api/shortcut/ask` — image+question **or** JSON `{ "question": "..." }` across memories
+- `POST https://snapact-beta.vercel.app/api/shortcut/describe` — multipart image
+- Stream Ask: same Ask URLs with `"stream": true` or `Accept: text/event-stream` (SSE). Apple Shortcuts **Get Contents of URL** waits for the full JSON; use `short_message` / `answer` (real line breaks) for Show Result.
 
 Note: Cursor SDK local agents run in the Node process. Prefer local `npm run dev` for the most reliable agent tooling demo; validate Vercel cold-starts separately.
 

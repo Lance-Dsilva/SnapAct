@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { SourcesList } from "@/components/Cards";
+import { MarkdownAnswer } from "@/components/MarkdownAnswer";
 import { Header } from "@/components/Header";
-import { askSnapAct } from "@/lib/api";
+import { streamAskSnapAct } from "@/lib/api";
 import type { AskResponse, SearchResultItem } from "@/types";
 
 function AskInner() {
@@ -21,8 +22,20 @@ function AskInner() {
     if (!q.trim()) return;
     setLoading(true);
     setError(null);
+    setAnswer({ answer: "", memories: [], citations: [] });
     try {
-      const ask = await askSnapAct(q.trim());
+      const ask = await streamAskSnapAct(q.trim(), {
+        onMemories: (memories) => {
+          setSearchHits(memories);
+          setAnswer((prev) => ({ ...(prev || { answer: "", citations: [] }), memories }));
+        },
+        onText: (text) => {
+          setAnswer((prev) => ({
+            ...(prev || { memories: [], citations: [] }),
+            answer: text,
+          }));
+        },
+      });
       setAnswer(ask);
       setSearchHits(ask.memories || []);
     } catch (e) {
@@ -60,7 +73,7 @@ function AskInner() {
           disabled={loading}
           className="rounded-2xl bg-[var(--ink)] px-4 py-3 text-sm font-medium text-white disabled:opacity-60"
         >
-          {loading ? "Thinking…" : "Ask"}
+          {loading ? "Streaming…" : "Ask"}
         </button>
       </form>
 
@@ -95,7 +108,13 @@ function AskInner() {
         <div className="space-y-4">
           <div className="rounded-2xl border border-[var(--border)] bg-white p-5 shadow-[var(--shadow)]">
             <h2 className="text-sm font-semibold text-[var(--ink)]">Answer</h2>
-            <p className="mt-2 leading-relaxed text-[var(--ink)]">{answer.answer}</p>
+            <div className="mt-2">
+              {answer.answer ? (
+                <MarkdownAnswer text={answer.answer} />
+              ) : loading ? (
+                <p className="text-sm text-[var(--muted)]">Searching memories…</p>
+              ) : null}
+            </div>
           </div>
           <SourcesList citations={answer.citations || []} />
           <div>

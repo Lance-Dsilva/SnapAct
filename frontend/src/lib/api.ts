@@ -70,6 +70,72 @@ export async function askSnapAct(question: string) {
   return handle<AskResponse>(res);
 }
 
+export async function streamAskSnapAct(
+  question: string,
+  handlers: {
+    onMemories?: (memories: SearchResultItem[]) => void;
+    onText?: (text: string) => void;
+  },
+): Promise<AskResponse> {
+  const res = await fetch(url("/api/ask"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+    },
+    body: JSON.stringify({ question, stream: true }),
+  });
+  if (!res.ok || !res.body) {
+    return handle<AskResponse>(res);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finalAnswer: AskResponse = { answer: "", memories: [], citations: [] };
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() || "";
+    for (const part of parts) {
+      const line = part.split("\n").find((l) => l.startsWith("data: "));
+      if (!line) continue;
+      try {
+        const event = JSON.parse(line.slice(6)) as {
+          type: string;
+          memories?: SearchResultItem[];
+          text?: string;
+          answer?: string;
+          short_message?: string;
+          citations?: AskResponse["citations"];
+          detail?: string;
+        };
+        if (event.type === "memories" && event.memories) {
+          handlers.onMemories?.(event.memories);
+          finalAnswer.memories = event.memories;
+        } else if (event.type === "delta" && event.text) {
+          handlers.onText?.(event.text);
+          finalAnswer.answer = event.text;
+        } else if (event.type === "done") {
+          finalAnswer = {
+            answer: event.answer || finalAnswer.answer,
+            memories: event.memories || finalAnswer.memories,
+            citations: event.citations || [],
+            short_message: event.short_message,
+          };
+        } else if (event.type === "error") {
+          throw new Error(event.detail || "Ask failed");
+        }
+      } catch (err) {
+        if (err instanceof SyntaxError) continue;
+        throw err;
+      }
+    }
+  }
+  return finalAnswer;
+}
+
 export async function refreshIntelligence() {
   const res = await fetch(url("/api/intelligence/refresh"), { method: "POST" });
   return handle<HomeFeedPlan>(res);

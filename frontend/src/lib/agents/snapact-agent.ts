@@ -99,6 +99,49 @@ function extractJsonObject(text: string): Record<string, unknown> {
   return { answer: trimmed, description: trimmed, title: "Screenshot", searchable_text: trimmed };
 }
 
+export function unescapeModelText(text: string) {
+  return text
+    .replace(/\\n/g, "\n")
+    .replace(/\\t/g, "\t")
+    .replace(/\\"/g, '"')
+    .trim();
+}
+
+export function parseAskOutput(text: string): {
+  answer: string;
+  short_message: string;
+  citations: MemoryAnalysis["citations"];
+  referenced_memory_ids: string[];
+  agent_activity: string[];
+} {
+  const raw = unescapeModelText(text);
+  const json = extractJsonObject(raw);
+  if (typeof json.answer === "string" && json.answer.trim() && raw.trim().startsWith("{")) {
+    const answer = unescapeModelText(String(json.answer));
+    return {
+      answer,
+      short_message: unescapeModelText(String(json.short_message || answer)).slice(0, 500),
+      citations: Array.isArray(json.citations) ? (json.citations as MemoryAnalysis["citations"]) : [],
+      referenced_memory_ids: Array.isArray(json.referenced_memory_ids)
+        ? (json.referenced_memory_ids as string[])
+        : [],
+      agent_activity: Array.isArray(json.agent_activity)
+        ? (json.agent_activity as string[])
+        : ["Retrieved memories", "Synthesized answer"],
+    };
+  }
+  const [markdown, short] = raw.split(/\n---SHORT---\n/);
+  const answer = unescapeModelText(markdown || raw);
+  const shortMessage = unescapeModelText(short || answer.split("\n").filter(Boolean)[0] || answer).slice(0, 500);
+  return {
+    answer,
+    short_message: shortMessage,
+    citations: [],
+    referenced_memory_ids: [],
+    agent_activity: ["Retrieved memories", "Synthesized answer"],
+  };
+}
+
 function normalizeAnalysis(
   data: Record<string, unknown>,
   extras: {
@@ -326,6 +369,7 @@ async function runCursorPrompt(input: {
   model?: string;
   tools?: string[];
   label: string;
+  onText?: (chunk: string) => void;
 }): Promise<{ text: string; meta: AgentRunMeta }> {
   const cfg = requireCursorConfig();
   if (cfg.useMockCursor || !cursorConfigured()) {
@@ -432,9 +476,21 @@ async function runCursorPrompt(input: {
     const run = await agent.send(message);
     console.info(`[snapact-agent] run_id=${run.id} agent_id=${agent.agentId}`);
 
+    let streamed = "";
     for await (const event of run.stream()) {
       if (event.type === "tool_call" && event.name) {
         toolsUsed.add(String(event.name));
+      }
+      if (event.type === "assistant" && "message" in event) {
+        const content = (event.message?.content || []) as Array<{ type?: string; text?: string }>;
+        const text = content
+          .map((block) => (block && block.type === "text" ? String(block.text || "") : ""))
+          .join("");
+        if (text.length > streamed.length) {
+          const chunk = text.slice(streamed.length);
+          streamed = text;
+          input.onText?.(chunk);
+        }
       }
     }
 
@@ -568,6 +624,7 @@ export async function askAboutScreenshot(input: {
 export async function analyzeSavedMemories(input: {
   question: string;
   memories: Array<Record<string, unknown>>;
+  onText?: (chunk: string) => void;
 }): Promise<{
   answer: string;
   short_message: string;
@@ -583,8 +640,11 @@ export async function analyzeSavedMemories(input: {
       .map((m) => m.title || m.memory_id)
       .filter(Boolean);
     const answer = titles.length
-      ? `Based on your saved screenshots for “${input.question}”: ${titles.join(", ")}.`
+      ? `Based on your saved screenshots for “${input.question}”:\n\n${titles
+          .map((t, i) => `${i + 1}. **${t}**`)
+          .join("\n")}`
       : `I don't have matching memories yet for “${input.question}”.`;
+    input.onText?.(answer);
     return {
       answer,
       short_message: answer,
@@ -604,20 +664,11 @@ export async function analyzeSavedMemories(input: {
     model: cfg.cursorSearchModel,
     tools: [],
     label: "ask-across-memories",
+    onText: input.onText,
   });
-  const data = extractJsonObject(text);
+  const parsed = parseAskOutput(text);
   return {
-    answer: String(data.answer || text),
-    short_message: String(data.short_message || data.answer || text).slice(0, 280),
-    citations: Array.isArray(data.citations)
-      ? (data.citations as MemoryAnalysis["citations"])
-      : [],
-    referenced_memory_ids: Array.isArray(data.referenced_memory_ids)
-      ? (data.referenced_memory_ids as string[])
-      : [],
-    agent_activity: Array.isArray(data.agent_activity)
-      ? (data.agent_activity as string[])
-      : ["Retrieved memories", "Synthesized answer"],
+    ...parsed,
     meta,
   };
 }

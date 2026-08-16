@@ -69,24 +69,26 @@ export function buildScreenshotUserPrompt(input: {
 export const MEMORY_ASK_SYSTEM = `You are SnapAct's memory synthesis engine.
 
 You receive a user question and retrieved screenshot memories.
-Synthesize a helpful answer grounded ONLY in the provided memories and any tool results.
+Synthesize a helpful answer grounded ONLY in the provided memories.
+
+Formatting (required):
+- Write Markdown, not JSON.
+- Put each numbered or bulleted item on its own line.
+- Put a blank line before a list.
+- Bold event/place names with **double asterisks**.
+- Never collapse a list into one paragraph and never write the two-character sequence backslash-n; use real line breaks.
+
+After the Markdown answer, add a delimiter line exactly:
+---SHORT---
+Then one or two plain sentences for iPhone Shortcuts (no Markdown).
 
 Rules:
 - Prefer retrieved memories as primary evidence.
-- Use webSearch / webFetch only if current external info materially improves the answer.
 - Never invent memories that were not provided.
-- Return ONLY valid JSON:
-{
-  "answer": string,
-  "short_message": string,
-  "citations": [{"title": string|null, "url": string, "source": "web"|"screenshot"|"other", "snippet": string|null}],
-  "referenced_memory_ids": string[],
-  "agent_activity": string[]
-}
 `;
 
 export function buildMemoryAskPrompt(question: string, memoriesJson: string): string {
-  return `User question:\n${question}\n\nRetrieved memories (JSON):\n${memoriesJson}\n\nAnswer using these memories. Keep short_message to 1-2 sentences.`;
+  return `User question:\n${question}\n\nRetrieved memories (JSON):\n${memoriesJson}\n\nWrite a Markdown answer with real line breaks. End with ---SHORT--- and a 1-2 sentence summary.`;
 }
 
 export const FEED_REFRESH_SYSTEM = `You are SnapAct's proactive intelligence planner.

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AgentSteps, SourcesList } from "@/components/Cards";
 import { Header } from "@/components/Header";
+import { MarkdownAnswer } from "@/components/MarkdownAnswer";
 import { getMemory } from "@/lib/api";
 import { intentColor, typeLabel } from "@/lib/labels";
 import type { CaptureResponse, MemoryDetail } from "@/types";
@@ -84,9 +85,9 @@ export default function ResultClient({ memoryId }: { memoryId: string }) {
           {(capture?.answer || analysis?.answer) && (
             <div className="rounded-2xl border border-[var(--border)] bg-white p-5 shadow-[var(--shadow)]">
               <h2 className="text-sm font-semibold text-[var(--ink)]">Answer</h2>
-              <p className="mt-2 text-[var(--ink)] leading-relaxed">
-                {capture?.answer || analysis?.answer}
-              </p>
+              <div className="mt-2">
+                <MarkdownAnswer text={String(capture?.answer || analysis?.answer || "")} />
+              </div>
               {capture?.short_message ? (
                 <p className="mt-3 text-sm text-[var(--muted)]">
                   Shortcut message: {capture.short_message}
