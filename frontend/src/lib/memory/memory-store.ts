@@ -61,7 +61,7 @@ function isHiddenTestMemory(mem: {
   if (ids.some((id) => HIDDEN_TEST_IDS.has(id))) return true;
   if (String(mem.metadata?.source || mem.analysis?.source || "") === "test") return true;
   const blob = `${mem.analysis?.title || ""} ${JSON.stringify(mem.metadata || {})}`.toLowerCase();
-  return /latest-first test/.test(blob);
+  return /latest-first test/.test(blob) || /stay hungry,\s*stay foolish/.test(blob);
 }
 
 function inferContentType(hit: RagSearchHit): string {

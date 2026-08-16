@@ -58,7 +58,7 @@ function byNewest(a: MemoryDetail, b: MemoryDetail) {
 function matchesType(memory: MemoryDetail, type: string) {
   const cat = String(memory.metadata?.category || "").toLowerCase();
   if (memory.content_type === type) return true;
-  if (type === "quote" && (cat === "entertainment" || cat === "quote")) return true;
+  if (type === "quote" && cat === "quote") return true;
   if (type === "event" && cat === "event") return true;
   if (type === "person_followup" && (cat === "people" || cat === "person")) return true;
   return false;
@@ -123,7 +123,7 @@ export default function HomeClient() {
         upcoming_events: live.filter((m) => matchesType(m, "event")).map(toItem),
         follow_ups: live.filter((m) => matchesType(m, "person_followup")).map(toItem),
         suggested_explorations: [],
-        quotes: live.filter((m) => matchesType(m, "quote")).map(toItem),
+        quotes: live.filter((m) => matchesType(m, "quote") && !/stay hungry/i.test(m.title)).map(toItem),
         recent: live.map(toItem),
       });
     } catch (e) {
@@ -137,7 +137,9 @@ export default function HomeClient() {
     void load();
   }, [load]);
 
-  const quotes = feed?.quotes?.length ? feed.quotes : memories.filter((m) => matchesType(m, "quote")).map(toItem);
+  const quotes = (feed?.quotes?.length ? feed.quotes : memories.filter((m) => matchesType(m, "quote")).map(toItem)).filter(
+    (item) => !/stay hungry/i.test(item.title),
+  );
   const events = feed?.upcoming_events?.length
     ? feed.upcoming_events
     : memories.filter((m) => matchesType(m, "event")).map(toItem);

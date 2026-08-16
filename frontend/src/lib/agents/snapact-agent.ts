@@ -239,6 +239,7 @@ function mockAnalyzeScreenshot(input: {
   const q = `${input.question || ""} ${input.userDescription || ""}`.toLowerCase();
   const wantsEvent = /event|austin|hackathon|similar/.test(q);
   const wantsPlace = /restaurant|dinner|birthday|place/.test(q) || input.mode === "describe";
+  const wantsQuote = /quote|stay hungry|foolish/.test(q);
 
   let analysis: MemoryAnalysis;
   if (wantsEvent) {
@@ -321,7 +322,7 @@ function mockAnalyzeScreenshot(input: {
         "Memory metadata ready",
       ],
     };
-  } else {
+  } else if (wantsQuote) {
     analysis = {
       title: "Stay hungry, stay foolish",
       content_type: "quote",
@@ -350,6 +351,30 @@ function mockAnalyzeScreenshot(input: {
         "Intent classified as REMEMBER",
         "Memory metadata ready",
       ],
+      web_search_used: false,
+    };
+  } else {
+    const label = input.userDescription?.trim() || "Saved screenshot";
+    analysis = {
+      title: label.slice(0, 80),
+      content_type: "other",
+      intent_mode: "REMEMBER",
+      intent_summary: "Screenshot saved for later.",
+      description: "Screenshot captured and saved to SnapAct.",
+      searchable_text: `Saved screenshot. ${input.userDescription || ""} Category: other. Intent: REMEMBER.`,
+      tags: ["screenshot"],
+      entities: [],
+      actionable: false,
+      urgency: "none",
+      needs_live_search: false,
+      confidence: 0.5,
+      suggested_actions: [{ type: "save", label: "Saved" }],
+      answer: null,
+      user_question: input.question || null,
+      source: input.source || null,
+      citations: [],
+      short_message: `Saved to SnapAct ✓ ${label}`.slice(0, 280),
+      agent_activity: ["Screenshot understood", "Intent classified as REMEMBER", "Memory metadata ready"],
       web_search_used: false,
     };
   }

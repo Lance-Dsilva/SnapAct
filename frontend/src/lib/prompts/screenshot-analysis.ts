@@ -17,6 +17,7 @@ Determine:
 9. Produce structured JSON conforming exactly to the supplied schema.
 
 Rules:
+- If the screenshot is primarily a quotation (tweet, poster, book, slide), set content_type to "quote". Do not use quote as a default when the image is something else.
 - Avoid unnecessary searches. Quotes and static knowledge usually need none.
 - Events, price checks, current business info, and "similar/nearby now" questions often need live search.
 - Never fabricate factual URLs, dates, names, or registration links.

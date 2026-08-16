@@ -38,8 +38,8 @@ async function main() {
     mimeType: "image/png",
     mode: "save",
   });
-  assert(quote.analysis.intent_mode === "REMEMBER", "quote → REMEMBER");
-  assert(quote.analysis.content_type === "quote", "quote content_type");
+  assert(quote.analysis.intent_mode === "REMEMBER", "save → REMEMBER");
+  assert(quote.analysis.content_type === "other", "save default content_type");
 
   const event = await analyzeScreenshot({
     imageBytes: png(),
