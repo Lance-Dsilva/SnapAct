@@ -4,6 +4,7 @@
  */
 
 import { getConfig, usingRemoteMemory } from "@/lib/config";
+import { shortenIndexBlob } from "@/lib/card-summary";
 import { ragIndex, ragSearch, type RagSearchHit } from "@/lib/memory/rag-client";
 import { makeImagePath, uploadScreenshot } from "@/lib/memory/supabase-storage";
 import type { MemoryAnalysis, MemoryRecord, MemorySearchHit } from "@/lib/schemas/memory";
@@ -295,16 +296,10 @@ export class MemoryStore {
           externalId,
           imagePath,
           contentType: input.contentType,
-          description: [
-            analysis?.title,
-            (input.metadata.description as string) || analysis?.description,
-            input.searchableText,
-            `Uploaded at ${nowIso()}`,
-          ]
-            .filter((part) => typeof part === "string" && part.trim())
-            .join(". ")
-            .slice(0, 4000),
-          ocrText: analysis?.extracted_text_summary || input.searchableText,
+          description: (analysis?.description || analysis?.title || input.searchableText).slice(0, 400),
+          ocrText: [analysis?.extracted_text_summary, input.searchableText, `Uploaded at ${nowIso()}`]
+            .filter(Boolean)
+            .join("\n"),
           category: (input.metadata.content_type as string) || analysis?.content_type || "other",
           metadata: {
             user_id: input.userId,
@@ -312,6 +307,7 @@ export class MemoryStore {
             content_type: analysis?.content_type,
             intent_mode: analysis?.intent_mode,
             title: analysis?.title,
+            summary: analysis?.description,
             tags: analysis?.tags,
             event: analysis?.event,
             temporal: analysis?.temporal || input.metadata.temporal,
@@ -501,8 +497,9 @@ export class MemoryStore {
         title,
         content_type: contentType as MemoryAnalysis["content_type"],
         intent_mode: (item.metadata.intent_mode as MemoryAnalysis["intent_mode"]) || "REMEMBER",
-        intent_summary: item.description || "Saved screenshot",
-        description: item.description,
+        intent_summary: String(item.metadata.summary || item.description || "Saved screenshot"),
+        description:
+          String(item.metadata.summary || "").trim() || shortenIndexBlob(item.description, title),
         searchable_text: [item.description, item.ocr_text, item.metadata.searchable_text]
           .filter(Boolean)
           .join("\n"),
@@ -522,6 +519,10 @@ export class MemoryStore {
       } as MemoryAnalysis);
     if (!analysis.temporal && item.metadata.temporal) {
       analysis.temporal = item.metadata.temporal as Record<string, unknown>;
+    }
+    if (item.metadata.summary || (analysis.description && analysis.description.length > 220)) {
+      analysis.description =
+        String(item.metadata.summary || "").trim() || shortenIndexBlob(analysis.description, title);
     }
     const metadata = {
       ...item.metadata,

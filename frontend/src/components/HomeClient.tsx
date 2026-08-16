@@ -16,6 +16,7 @@ import {
   IconSparkle,
 } from "@/components/Icons";
 import { fetchHealth, listMemories } from "@/lib/api";
+import { cardSummary } from "@/lib/card-summary";
 import { addDaysYmd, dueAtFromMemory } from "@/lib/due-date";
 import type { AttentionItem, HomeFeedPlan, MemoryDetail } from "@/types";
 
@@ -211,7 +212,7 @@ export default function HomeClient() {
                 )}
                 <div className="min-w-0">
                   <div className="truncate font-semibold">{m.title}</div>
-                  <p className="line-clamp-2 text-sm text-[#6b7280]">{m.description}</p>
+                  <p className="line-clamp-2 text-sm text-[#6b7280]">{cardSummary(m)}</p>
                 </div>
               </Link>
             ))}
@@ -245,8 +246,8 @@ export default function HomeClient() {
                         <p className="mt-0.5 line-clamp-2 text-sm text-[#6b7280]">
                           {item.reason}
                         </p>
-                        <p className="mt-1 text-[12px] text-[var(--accent)]">
-                          {mem?.description || "Follow up"}
+                        <p className="mt-1 line-clamp-2 text-[12px] text-[var(--accent)]">
+                          {mem ? cardSummary(mem) : "Follow up"}
                         </p>
                       </div>
                     </Link>
@@ -275,7 +276,7 @@ export default function HomeClient() {
                     <div className="min-w-0 flex-1">
                       <div className="truncate font-semibold">{item.title}</div>
                       <p className="mt-0.5 line-clamp-2 text-sm text-[#6b7280]">
-                        {mem?.description || item.reason}
+                        {mem ? cardSummary(mem) : item.reason}
                       </p>
                       <p className="mt-1 text-[12px] text-[#9ca3af]">
                         {formatUploaded(mem ? uploadedAt(mem) : "")}

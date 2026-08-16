@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getConfig } from "@/lib/config";
+import { cardSummary } from "@/lib/card-summary";
 import { getMemoryStore } from "@/lib/memory/memory-store";
 import type { MemoryRecord } from "@/lib/schemas/memory";
 
@@ -25,7 +26,13 @@ function serialize(mem: MemoryRecord) {
     title: mem.analysis?.title || mem.metadata.title || mem.memory_id,
     content_type: mem.analysis?.content_type || mem.metadata.content_type || "other",
     intent_mode: mem.analysis?.intent_mode || mem.metadata.intent_mode || "REMEMBER",
-    description: mem.analysis?.description || mem.metadata.description || "",
+    description: cardSummary({
+      title: String(mem.analysis?.title || mem.metadata.title || ""),
+      description: String(mem.analysis?.description || mem.metadata.description || ""),
+      user_description: mem.user_description,
+      analysis: mem.analysis,
+      metadata: mem.metadata,
+    }),
     tags: mem.analysis?.tags || mem.metadata.tags || [],
   };
 }
