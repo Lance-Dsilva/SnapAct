@@ -42,10 +42,13 @@ export async function GET(req: Request) {
       limit,
       filters: contentType ? { content_type: contentType } : {},
     });
-    return NextResponse.json({
-      memories: memories.map(serialize),
-      source: store.usingRemote ? "api" : "mock",
-    });
+    return NextResponse.json(
+      {
+        memories: memories.map(serialize),
+        source: store.usingRemote ? "api" : "mock",
+      },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (err) {
     return NextResponse.json(
       { detail: err instanceof Error ? err.message : "List failed" },

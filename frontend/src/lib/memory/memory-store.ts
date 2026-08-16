@@ -389,7 +389,7 @@ export class MemoryStore {
         const probes = filterType ? [filterType] : ["event", "screenshot"];
         const byId = new Map<string, MemoryRecord>();
         for (const query of probes) {
-          const hits = await ragSearch({ query, topK: 12 }).catch((error) => {
+          const hits = await ragSearch({ query, topK: 8, signImages: false }).catch((error) => {
             console.warn(`RAG list probe failed query=${query}`, error);
             return [] as RagSearchHit[];
           });

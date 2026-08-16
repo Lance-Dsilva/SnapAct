@@ -124,6 +124,7 @@ export async function ragIndex(input: {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(body),
+    cache: "no-store",
     signal: AbortSignal.timeout(cfg.memoryHttpTimeoutMs),
   });
   if (!res.ok) {
@@ -181,6 +182,7 @@ export async function ragSearch(input: {
   const res = await fetch(url, {
     method: "GET",
     headers: { Accept: "application/json" },
+    cache: "no-store",
     signal: AbortSignal.timeout(cfg.memoryHttpTimeoutMs),
   });
   if (!res.ok) {
