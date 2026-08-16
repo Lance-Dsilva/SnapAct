@@ -3,6 +3,7 @@ import { handleCapture } from "@/lib/capture";
 import { getConfig } from "@/lib/config";
 import { sweepStalled } from "@/lib/enrich";
 import { askMemories } from "@/lib/retrieval/retrieve";
+import { methodHelp } from "@/lib/shortcut-help";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -59,4 +60,9 @@ export async function POST(req: Request) {
     const message = err instanceof Error ? err.message : "Ask failed";
     return Response.json({ error: message, detail: message }, { status: 502 });
   }
+}
+
+/** Shortcuts defaults to GET; explain the fix rather than returning a bare 405. */
+export async function GET() {
+  return methodHelp("ask");
 }
