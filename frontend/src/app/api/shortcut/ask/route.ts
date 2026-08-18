@@ -1,4 +1,5 @@
 import { after } from "next/server";
+import { unauthorizedShortcut, verifyShortcutKey } from "@/lib/auth";
 import { handleCapture } from "@/lib/capture";
 import { getConfig } from "@/lib/config";
 import { sweepStalled } from "@/lib/enrich";
@@ -15,6 +16,8 @@ export const maxDuration = 300;
  * everything saved. `short_message` is always plain text for "Show Result".
  */
 export async function POST(req: Request) {
+  if (!(await verifyShortcutKey(req))) return unauthorizedShortcut();
+
   const contentType = req.headers.get("content-type") || "";
   const cfg = getConfig();
 

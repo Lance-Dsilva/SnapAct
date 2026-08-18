@@ -139,10 +139,11 @@ export function Header({
             <IconBell className="h-[19px] w-[19px]" />
             <span className="absolute right-2 top-2 h-[7px] w-[7px] rounded-full bg-indigo-500 ring-2 ring-[var(--background)]" />
           </button>
-          <button
-            type="button"
+          <Link
+            href="/settings"
             className="flex items-center gap-1 rounded-full p-0.5 pr-1 transition hover:bg-white"
-            aria-label="Account"
+            aria-label="Settings"
+            title="Settings"
           >
             <span
               className="flex h-8 w-8 items-center justify-center rounded-full text-[13px] font-semibold text-white"
@@ -151,7 +152,7 @@ export function Header({
               D
             </span>
             <IconChevronDown className="h-4 w-4 text-[var(--muted)]" />
-          </button>
+          </Link>
         </div>
       </div>
     </header>
