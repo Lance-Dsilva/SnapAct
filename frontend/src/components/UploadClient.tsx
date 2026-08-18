@@ -1,9 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
-import { Header } from "@/components/Header";
+import { Content, Page, TopBar } from "@/components/Shell";
 import { captureScreenshot } from "@/lib/api";
 
 type Mode = "save" | "ask" | "describe";
@@ -61,9 +60,10 @@ export default function UploadClient() {
   }
 
   return (
-    <>
-      <Header />
-      <div className="mx-auto flex w-full max-w-[520px] flex-col gap-6 px-5 py-8">
+    <Page>
+      <TopBar title="Add a screenshot" />
+      <Content width="narrow">
+      <div className="flex flex-col gap-5">
       <div>
         <h1 className="text-[28px] font-bold tracking-[-0.02em] text-[var(--ink)]">
           Upload Screenshot
@@ -166,10 +166,8 @@ export default function UploadClient() {
         </button>
       </form>
 
-      <Link href="/" className="text-[13px] font-medium text-[var(--accent)]">
-        ← Back home
-      </Link>
       </div>
-    </>
+      </Content>
+    </Page>
   );
 }

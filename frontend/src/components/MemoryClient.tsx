@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { EmptyState, IntentPill, SourcesList } from "@/components/Cards";
-import { Header } from "@/components/Header";
+import { Content, Page, TopBar } from "@/components/Shell";
 import { IconCheck, IconChevronRight, IconExternal } from "@/components/Icons";
 import { deleteMemory, getMemory, setMemoryCompleted } from "@/lib/api";
 import { formatDate, relativeDay, savedAt, typeStyle } from "@/lib/labels";
@@ -84,9 +84,9 @@ export default function MemoryClient({ memoryId }: { memoryId: string }) {
   const style = memory ? typeStyle(memory.content_type) : null;
 
   return (
-    <>
-      <Header />
-      <main className="mx-auto w-full max-w-3xl px-5 py-8 sm:px-8">
+    <Page>
+      <TopBar title="Memory" back="/" />
+      <Content width="narrow">
         {error ? (
           <EmptyState
             title="Memory not found"
@@ -265,7 +265,7 @@ export default function MemoryClient({ memoryId }: { memoryId: string }) {
             </div>
           </div>
         )}
-      </main>
-    </>
+      </Content>
+    </Page>
   );
 }

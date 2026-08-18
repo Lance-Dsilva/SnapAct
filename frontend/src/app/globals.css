@@ -23,6 +23,11 @@
   --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.1);
 
   --radius: 16px;
+
+  /* Real values only when the document opts in via viewport-fit=cover. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --tabbar: 60px;
 }
 
 @theme inline {
@@ -37,34 +42,59 @@ body {
   font-family: var(--font-body), ui-sans-serif, system-ui, -apple-system, sans-serif;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  /* Stops iOS Safari inflating text in landscape. */
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: none;
 }
 
-/*
- * Must live in @layer base. Tailwind v4 emits utilities into @layer utilities,
- * and unlayered rules outrank every layered rule in the cascade — so an
- * unlayered `a { color: inherit }` silently beats `text-white`, painting dark
- * text on dark buttons that are anchors rather than buttons.
- */
 @layer base {
   a {
     color: inherit;
     text-decoration: none;
   }
+
+  /* iOS zooms the page when a focused input is under 16px. */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
 }
 
-/* Thumbnails are screenshots: show the top of the image, where the content is. */
+/* Screenshots are tall; show the top, where the content is. */
 .thumb {
   object-fit: cover;
   object-position: top center;
   background: var(--surface-soft);
 }
 
-.scroll-x {
+/* Horizontal chip rails: momentum scroll, snap, no visible bar. */
+.rail {
   scrollbar-width: none;
   -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
 }
-.scroll-x::-webkit-scrollbar {
+.rail::-webkit-scrollbar {
   display: none;
+}
+.rail > * {
+  scroll-snap-align: start;
+}
+
+/* Bleed a rail to the screen edges so chips scroll out of view naturally. */
+.bleed {
+  margin-inline: calc(var(--gutter) * -1);
+  padding-inline: var(--gutter);
+}
+
+.pad-bottom-nav {
+  padding-bottom: calc(var(--tabbar) + var(--safe-bottom) + 20px);
 }
 
 @keyframes rise {
@@ -79,4 +109,26 @@ body {
 }
 .rise {
   animation: rise 0.28s ease-out both;
+}
+
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-7px);
+  }
+  40%,
+  80% {
+    transform: translateX(7px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  [class*="animate-"] {
+    animation: none !important;
+  }
 }

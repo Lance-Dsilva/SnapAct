@@ -5,8 +5,11 @@ import { TYPE_STYLES, typeStyle } from "@/lib/labels";
 import type { ContentType } from "@/types";
 
 /**
- * Category chips, ordered by how much the user actually has. Only types with
- * something in them appear — an empty category is noise, not navigation.
+ * Category chips, ordered by how much the user actually has.
+ *
+ * The rail bleeds to the screen edges so chips scroll off naturally instead of
+ * stopping at a gutter and looking clipped — the failure mode on a 375px screen,
+ * where a fixed row can only ever show two and a half chips.
  */
 export function FilterChips({
   active,
@@ -24,29 +27,33 @@ export function FilterChips({
   const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
 
   return (
-    <div className="scroll-x flex gap-2 overflow-x-auto pb-1">
-      <Chip
-        id="all"
-        label="All"
-        count={total}
-        active={active === "all"}
-        onChange={onChange}
-        icon={<IconGrid className="h-[15px] w-[15px]" />}
-      />
-      {present.map((type) => {
-        const style = typeStyle(type);
-        return (
-          <Chip
-            key={type}
-            id={type}
-            label={style.plural}
-            count={counts[type]}
-            active={active === type}
-            onChange={onChange}
-            icon={<style.Icon className="h-[15px] w-[15px]" />}
-          />
-        );
-      })}
+    <div className="bleed relative">
+      <div className="rail flex gap-2 overflow-x-auto pb-1">
+        <Chip
+          id="all"
+          label="All"
+          count={total}
+          active={active === "all"}
+          onChange={onChange}
+          icon={<IconGrid className="h-[14px] w-[14px]" />}
+        />
+        {present.map((type) => {
+          const style = typeStyle(type);
+          return (
+            <Chip
+              key={type}
+              id={type}
+              label={style.plural}
+              count={counts[type]}
+              active={active === type}
+              onChange={onChange}
+              icon={<style.Icon className="h-[14px] w-[14px]" />}
+            />
+          );
+        })}
+        {/* Trailing spacer so the last chip clears the gutter. */}
+        <span className="w-1 shrink-0" aria-hidden />
+      </div>
     </div>
   );
 }
@@ -71,17 +78,17 @@ function Chip({
       type="button"
       onClick={() => onChange(id)}
       aria-pressed={active}
-      className={`flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-2 text-[13.5px] font-medium transition ${
+      className={`flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium transition active:scale-95 ${
         active
-          ? "border-transparent bg-[var(--ink)] text-white shadow-[var(--shadow-md)]"
-          : "border-[var(--border)] bg-white text-[var(--ink-soft)] hover:border-[var(--border-strong)] hover:shadow-[var(--shadow)]"
+          ? "border-transparent bg-[var(--ink)] text-white"
+          : "border-[var(--border)] bg-white text-[var(--ink-soft)]"
       }`}
     >
       {icon}
       {label}
       {count !== undefined && count > 0 ? (
         <span
-          className={`text-[12px] font-semibold ${active ? "text-white/60" : "text-[var(--muted-light)]"}`}
+          className={`text-[11.5px] font-semibold ${active ? "text-white/60" : "text-[var(--muted-light)]"}`}
         >
           {count}
         </span>

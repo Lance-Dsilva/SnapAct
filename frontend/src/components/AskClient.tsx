@@ -3,7 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useRef, useState } from "react";
 import { EmptyState, ResultCard } from "@/components/Cards";
-import { Header } from "@/components/Header";
+import { Content, Page, TopBar } from "@/components/Shell";
 import { MarkdownAnswer } from "@/components/MarkdownAnswer";
 import { streamAsk } from "@/lib/api";
 import type { RetrievedMemory } from "@/types";
@@ -77,27 +77,25 @@ function AskInner() {
   }
 
   return (
-    <>
-      <Header />
-      <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-5 py-8 sm:px-8">
-      <h1 className="text-[28px] font-bold tracking-[-0.02em] text-[var(--ink)]">
-        Ask your screenshots
-      </h1>
-
+    <Page>
+      <TopBar title="Ask" />
+      <Content width="narrow">
+      <div className="flex flex-col gap-5">
       <form onSubmit={onSubmit} className="flex gap-2">
         <input
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           placeholder="What events have I saved?"
-          className="min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-white px-4 py-3 text-[14px] outline-none transition focus:border-indigo-300 focus:shadow-[0_0_0_4px_rgba(99,102,241,0.1)]"
+          enterKeyHint="search"
+          className="min-h-[46px] min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-white px-4 outline-none transition focus:border-indigo-300 focus:shadow-[0_0_0_4px_rgba(99,102,241,0.1)]"
         />
         <button
           type="submit"
           disabled={loading}
-          className="rounded-xl px-5 py-3 text-[13px] font-medium text-white transition disabled:opacity-60"
+          className="min-h-[46px] shrink-0 rounded-xl px-5 text-[13px] font-medium text-white transition disabled:opacity-60"
           style={{ background: "var(--gradient)" }}
         >
-          {loading ? "Thinking…" : "Ask"}
+          {loading ? "…" : "Ask"}
         </button>
       </form>
 
@@ -158,8 +156,9 @@ function AskInner() {
           body="SnapAct only answers from screenshots you've actually saved, so it won't guess when it has nothing to go on."
         />
       ) : null}
-      </main>
-    </>
+      </div>
+      </Content>
+    </Page>
   );
 }
 

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Header } from "@/components/Header";
+import { Content, Page, TopBar } from "@/components/Shell";
 import { IconCheckCircle } from "@/components/Icons";
 
 function Card({
@@ -110,9 +110,9 @@ export default function SettingsClient() {
   }
 
   return (
-    <>
-      <Header />
-      <main className="mx-auto flex w-full max-w-2xl flex-col gap-5 px-5 py-8 sm:px-8">
+    <Page>
+      <TopBar title="Settings" back="/" />
+      <Content width="narrow">
         <div>
           <h1 className="text-[28px] font-bold tracking-[-0.02em] text-[var(--ink)]">Settings</h1>
           <p className="mt-1 text-[14px] text-[var(--muted)]">
@@ -251,7 +251,7 @@ export default function SettingsClient() {
             Back home
           </Link>
         </div>
-      </main>
-    </>
+      </Content>
+    </Page>
   );
 }

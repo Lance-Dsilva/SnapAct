@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { IntentPill, SourcesList } from "@/components/Cards";
-import { Header } from "@/components/Header";
+import { Content, Page, TopBar } from "@/components/Shell";
 import { IconCheckCircle, IconChevronRight } from "@/components/Icons";
 import { MarkdownAnswer } from "@/components/MarkdownAnswer";
 import { waitForReady } from "@/lib/api";
@@ -60,9 +60,9 @@ export default function ResultClient({ memoryId }: { memoryId: string }) {
   const style = typeStyle(contentType);
 
   return (
-    <>
-      <Header />
-      <main className="mx-auto w-full max-w-3xl px-5 py-8 sm:px-8">
+    <Page>
+      <TopBar title="Saved" back="/" />
+      <Content width="narrow">
         {error && !capture ? (
           <p className="text-rose-600">{error}</p>
         ) : !title ? (
@@ -195,7 +195,7 @@ export default function ResultClient({ memoryId }: { memoryId: string }) {
             </div>
           </div>
         )}
-      </main>
-    </>
+      </Content>
+    </Page>
   );
 }
