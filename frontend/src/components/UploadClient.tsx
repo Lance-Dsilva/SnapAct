@@ -61,10 +61,11 @@ export default function UploadClient() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[430px] flex-col gap-6 px-5 py-4">
-      <Header compact />
+    <>
+      <Header />
+      <div className="mx-auto flex w-full max-w-[520px] flex-col gap-6 px-5 py-8">
       <div>
-        <h1 className="text-[28px] font-bold tracking-tight text-[#111827]">
+        <h1 className="text-[28px] font-bold tracking-[-0.02em] text-[var(--ink)]">
           Upload Screenshot
         </h1>
         <p className="mt-2 text-sm text-[#6b7280]">
@@ -165,9 +166,10 @@ export default function UploadClient() {
         </button>
       </form>
 
-      <Link href="/" className="text-sm font-medium text-[var(--accent)]">
+      <Link href="/" className="text-[13px] font-medium text-[var(--accent)]">
         ← Back home
       </Link>
-    </div>
+      </div>
+    </>
   );
 }

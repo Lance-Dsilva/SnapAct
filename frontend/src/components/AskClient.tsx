@@ -77,21 +77,25 @@ function AskInner() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-10">
-      <Header compact />
-      <h1 className="text-3xl text-[var(--ink)]">Ask your screenshots</h1>
+    <>
+      <Header />
+      <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-5 py-8 sm:px-8">
+      <h1 className="text-[28px] font-bold tracking-[-0.02em] text-[var(--ink)]">
+        Ask your screenshots
+      </h1>
 
       <form onSubmit={onSubmit} className="flex gap-2">
         <input
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           placeholder="What events have I saved?"
-          className="min-w-0 flex-1 rounded-2xl border border-[var(--border)] bg-white px-4 py-3 outline-none focus:border-teal-400"
+          className="min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-white px-4 py-3 text-[14px] outline-none transition focus:border-indigo-300 focus:shadow-[0_0_0_4px_rgba(99,102,241,0.1)]"
         />
         <button
           type="submit"
           disabled={loading}
-          className="rounded-2xl bg-[var(--ink)] px-4 py-3 text-sm font-medium text-white disabled:opacity-60"
+          className="rounded-xl px-5 py-3 text-[13px] font-medium text-white transition disabled:opacity-60"
+          style={{ background: "var(--gradient)" }}
         >
           {loading ? "Thinking…" : "Ask"}
         </button>
@@ -107,7 +111,7 @@ function AskInner() {
                 setQuestion(example);
                 void run(example);
               }}
-              className="rounded-full border border-[var(--border)] bg-white px-3 py-1.5 text-[var(--muted)] hover:text-[var(--ink)]"
+              className="rounded-full border border-[var(--border)] bg-white px-3.5 py-2 text-[12.5px] text-[var(--muted)] transition hover:border-[var(--border-strong)] hover:text-[var(--ink)]"
             >
               {example}
             </button>
@@ -154,7 +158,8 @@ function AskInner() {
           body="SnapAct only answers from screenshots you've actually saved, so it won't guess when it has nothing to go on."
         />
       ) : null}
-    </div>
+      </main>
+    </>
   );
 }
 

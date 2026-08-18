@@ -1,16 +1,28 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #111827;
-  --ink: #111827;
-  --muted: #6b7280;
-  --accent: #007aff;
-  --accent-dark: #0066d6;
-  --border: #eef0f3;
-  --surface: #f3f4f6;
-  --surface-soft: #f8f9fb;
-  --shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
+  --background: #f7f8fa;
+  --surface: #ffffff;
+  --surface-soft: #f4f5f8;
+  --foreground: #0f172a;
+  --ink: #0f172a;
+  --ink-soft: #334155;
+  --muted: #64748b;
+  --muted-light: #94a3b8;
+  --border: #e9ebf0;
+  --border-strong: #dfe3ea;
+
+  --accent: #4f46e5;
+  --accent-dark: #4338ca;
+  --accent-soft: #eef2ff;
+  --gradient: linear-gradient(135deg, #6366f1 0%, #3b82f6 100%);
+
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.07);
+  --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.1);
+
+  --radius: 16px;
 }
 
 @theme inline {
@@ -20,13 +32,51 @@
 }
 
 body {
-  background: #ffffff;
+  background: var(--background);
   color: var(--foreground);
   font-family: var(--font-body), ui-sans-serif, system-ui, -apple-system, sans-serif;
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+/*
+ * Must live in @layer base. Tailwind v4 emits utilities into @layer utilities,
+ * and unlayered rules outrank every layered rule in the cascade — so an
+ * unlayered `a { color: inherit }` silently beats `text-white`, painting dark
+ * text on dark buttons that are anchors rather than buttons.
+ */
+@layer base {
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+}
+
+/* Thumbnails are screenshots: show the top of the image, where the content is. */
+.thumb {
+  object-fit: cover;
+  object-position: top center;
+  background: var(--surface-soft);
+}
+
+.scroll-x {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scroll-x::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise {
+  animation: rise 0.28s ease-out both;
 }
